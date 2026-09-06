@@ -1,3 +1,4 @@
+mod container;
 mod tui;
 use crate::tui::{app::App, tui::Tui};
 use color_eyre::Result;
