@@ -1,11 +1,10 @@
-use crate::tui::app::{App, Focus, MenuItem};
+use crate::tui::app::{App, Focus};
 
 use ratatui::{
     Frame,
-    layout::{Constraint, Direction, Layout, Rect},
-    style::{Color, Modifier, Style, Stylize},
-    text::{Line, Span},
-    widgets::{Block, BorderType, Borders, List, ListItem, ListState, Paragraph, Tabs, Wrap},
+    layout::{Constraint, Direction, HorizontalAlignment, Layout, Rect},
+    style::{Color, Style, Stylize},
+    widgets::{Block, BorderType, Borders, List, ListItem, ListState, Paragraph},
 };
 
 pub fn render(app: &mut App, frame: &mut Frame) {
@@ -30,6 +29,9 @@ pub fn render(app: &mut App, frame: &mut Frame) {
         app.focus == Focus::Menu,
         |item| ListItem::new(item.to_string()),
     );
+
+    // Render details pane
+    render_details(frame, outer_layout[1]);
 }
 
 fn render_list<T, F>(
@@ -63,4 +65,13 @@ fn render_list<T, F>(
         .fg(Color::Blue);
 
     frame.render_stateful_widget(list, area, state);
+}
+
+fn render_details(frame: &mut Frame, area: Rect) {
+    let text: &str = "Content Detail";
+    let paragraph = Paragraph::new(text)
+        .block(Block::bordered().title("Details"))
+        .style(Color::Blue)
+        .alignment(HorizontalAlignment::Center);
+    frame.render_widget(paragraph, area);
 }
