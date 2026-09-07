@@ -1,5 +1,6 @@
 mod container;
 mod tui;
+mod utils;
 use crate::tui::{app::App, tui::Tui};
 use color_eyre::Result;
 use ratatui::{Terminal, backend::CrosstermBackend};
