@@ -1,3 +1,6 @@
+use crate::container::{models::DockerContainer, service::list_containers};
+use crate::utils::driver_connector;
+use bollard::Docker;
 use color_eyre::Result;
 use ratatui::widgets::ListState;
 use std::fmt;
@@ -28,7 +31,6 @@ impl fmt::Display for MenuItem {
 }
 
 #[derive(Debug)]
-
 pub struct StatefullList<T> {
     pub items: Vec<T>,
     pub state: ListState,
@@ -47,11 +49,17 @@ impl<T> StatefullList<T> {
     }
 
     pub fn move_up(&mut self) {
+        if self.items.is_empty() {
+            return;
+        }
         let i: usize = self.state.selected().unwrap_or(0);
         self.state.select(Some(i.saturating_sub(1)));
     }
 
     pub fn move_down(&mut self) {
+        if self.items.is_empty() {
+            return;
+        }
         let i: usize = self.state.selected().unwrap_or(0);
         let next: usize = (i + 1).min(self.items.len() - 1);
         self.state.select(Some(next));
@@ -73,6 +81,8 @@ pub struct App {
     pub quit: bool,
     pub menu: StatefullList<MenuItem>,
     pub focus: Focus,
+    pub containers: StatefullList<DockerContainer>,
+    pub client: Docker,
 }
 
 impl App {
@@ -85,14 +95,18 @@ impl App {
     }
 
     pub async fn menu_data_loaded(&mut self) -> Result<()> {
-        self.load_selected()
+        self.load_selected().await
     }
 
-    pub fn load_selected(&mut self) -> Result<()> {
+    pub async fn load_selected(&mut self) -> Result<()> {
         match self.menu.selected() {
             Some(MenuItem::Images) => return Ok(()),
 
-            Some(MenuItem::Containers) => return Ok(()),
+            Some(MenuItem::Containers) => {
+                if self.containers.items.is_empty() {
+                    self.containers.items = list_containers(&self.client).await.unwrap_or_default();
+                }
+            }
 
             Some(MenuItem::Volumes) => return Ok(()),
 
@@ -111,6 +125,8 @@ impl App {
 impl Default for App {
     fn default() -> Self {
         let mut menu: StatefullList<MenuItem> = StatefullList::default();
+        let client = driver_connector()
+            .expect("Failed to connect to the Docker daemon. Is the docker daemon runing?");
 
         menu.items = vec![
             MenuItem::Images,
@@ -122,6 +138,8 @@ impl Default for App {
             quit: false,
             menu,
             focus: Focus::Menu,
+            containers: StatefullList::default(),
+            client,
         }
     }
 }

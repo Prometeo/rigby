@@ -1,4 +1,4 @@
-use crate::tui::app::{App, Focus};
+use crate::tui::app::{App, Focus, MenuItem};
 
 use ratatui::{
     Frame,
@@ -32,6 +32,21 @@ pub fn render(app: &mut App, frame: &mut Frame) {
 
     // Render details pane
     render_details(frame, outer_layout[1]);
+
+    match app.menu.selected() {
+        Some(MenuItem::Containers) => {
+            render_list(
+                &app.containers.items,
+                inner_layout[1],
+                &mut app.containers.state,
+                frame,
+                "Containers",
+                app.focus == Focus::Content,
+                |item| ListItem::new(item.to_string()),
+            );
+        }
+        _ => {}
+    }
 }
 
 fn render_list<T, F>(

@@ -3,7 +3,7 @@ use bollard::Docker;
 use bollard::query_parameters::ListContainersOptionsBuilder;
 use color_eyre::Result;
 
-pub async fn list_containers(client: Docker) -> Result<Vec<DockerContainer>> {
+pub async fn list_containers(client: &Docker) -> Result<Vec<DockerContainer>> {
     let options = ListContainersOptionsBuilder::default().all(true).build();
     let containers = client.list_containers(Some(options)).await?;
 
