@@ -1,5 +1,6 @@
 use crate::container::{models::DockerContainer, service::list_containers};
 use crate::image::{models::DockerImage, service::list_images};
+use crate::networking::{models::DockerNetwork, service::list_networks};
 use crate::utils::driver_connector;
 use bollard::Docker;
 use color_eyre::Result;
@@ -84,6 +85,7 @@ pub struct App {
     pub focus: Focus,
     pub containers: StatefullList<DockerContainer>,
     pub images: StatefullList<DockerImage>,
+    pub networks: StatefullList<DockerNetwork>,
     pub client: Docker,
 }
 
@@ -118,7 +120,12 @@ impl App {
 
             Some(MenuItem::Volumes) => return Ok(()),
 
-            Some(MenuItem::Networks) => return Ok(()),
+            Some(MenuItem::Networks) => {
+                if self.networks.items.is_empty() {
+                    self.networks.items = list_networks(&self.client).await.unwrap_or_default();
+                }
+                self.containers.select_first();
+            }
             None => {}
         }
 
@@ -148,6 +155,7 @@ impl Default for App {
             focus: Focus::Menu,
             containers: StatefullList::default(),
             images: StatefullList::default(),
+            networks: StatefullList::default(),
             client,
         }
     }

@@ -56,6 +56,17 @@ pub fn render(app: &mut App, frame: &mut Frame) {
                 |item| ListItem::new(item.to_string()),
             );
         }
+        Some(MenuItem::Networks) => {
+            render_list(
+                &app.networks.items,
+                inner_layout[1],
+                &mut app.networks.state,
+                frame,
+                "Networks",
+                app.focus == Focus::Content,
+                |item| ListItem::new(item.to_string()),
+            );
+        }
         _ => {}
     }
 }

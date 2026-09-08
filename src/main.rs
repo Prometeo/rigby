@@ -1,5 +1,6 @@
 mod container;
 mod image;
+mod networking;
 mod tui;
 mod utils;
 use crate::tui::{app::App, tui::Tui};
