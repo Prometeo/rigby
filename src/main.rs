@@ -1,4 +1,5 @@
 mod container;
+mod image;
 mod tui;
 mod utils;
 use crate::tui::{app::App, tui::Tui};

@@ -45,6 +45,17 @@ pub fn render(app: &mut App, frame: &mut Frame) {
                 |item| ListItem::new(item.to_string()),
             );
         }
+        Some(MenuItem::Images) => {
+            render_list(
+                &app.images.items,
+                inner_layout[1],
+                &mut app.images.state,
+                frame,
+                "Images",
+                app.focus == Focus::Content,
+                |item| ListItem::new(item.to_string()),
+            );
+        }
         _ => {}
     }
 }

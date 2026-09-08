@@ -1,4 +1,5 @@
 use crate::container::{models::DockerContainer, service::list_containers};
+use crate::image::{models::DockerImage, service::list_images};
 use crate::utils::driver_connector;
 use bollard::Docker;
 use color_eyre::Result;
@@ -82,6 +83,7 @@ pub struct App {
     pub menu: StatefullList<MenuItem>,
     pub focus: Focus,
     pub containers: StatefullList<DockerContainer>,
+    pub images: StatefullList<DockerImage>,
     pub client: Docker,
 }
 
@@ -100,12 +102,18 @@ impl App {
 
     pub async fn load_selected(&mut self) -> Result<()> {
         match self.menu.selected() {
-            Some(MenuItem::Images) => return Ok(()),
+            Some(MenuItem::Images) => {
+                if self.images.items.is_empty() {
+                    self.images.items = list_images(&self.client).await.unwrap_or_default();
+                }
+                self.images.select_first();
+            }
 
             Some(MenuItem::Containers) => {
                 if self.containers.items.is_empty() {
                     self.containers.items = list_containers(&self.client).await.unwrap_or_default();
                 }
+                self.containers.select_first();
             }
 
             Some(MenuItem::Volumes) => return Ok(()),
@@ -139,6 +147,7 @@ impl Default for App {
             menu,
             focus: Focus::Menu,
             containers: StatefullList::default(),
+            images: StatefullList::default(),
             client,
         }
     }
