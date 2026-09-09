@@ -1,9 +1,13 @@
-use crate::tui::app::{App, Focus, MenuItem};
+use crate::{
+    container::models::DockerContainer,
+    tui::app::{App, Focus, MenuItem},
+};
 
 use ratatui::{
     Frame,
     layout::{Constraint, Direction, HorizontalAlignment, Layout, Rect},
-    style::{Color, Style, Stylize},
+    style::{Color, Modifier, Style, Stylize},
+    text::{Line, Span},
     widgets::{Block, BorderType, Borders, List, ListItem, ListState, Paragraph},
 };
 
@@ -42,7 +46,7 @@ pub fn render(app: &mut App, frame: &mut Frame) {
                 frame,
                 "Containers",
                 app.focus == Focus::Content,
-                |item| ListItem::new(item.to_string()),
+                render_container_item,
             );
         }
         Some(MenuItem::Images) => {
@@ -67,7 +71,18 @@ pub fn render(app: &mut App, frame: &mut Frame) {
                 |item| ListItem::new(item.to_string()),
             );
         }
-        _ => {}
+        Some(MenuItem::Volumes) => {
+            render_list(
+                &app.volumes.items,
+                inner_layout[1],
+                &mut app.volumes.state,
+                frame,
+                "Volumes",
+                app.focus == Focus::Content,
+                |item| ListItem::new(item.to_string()),
+            );
+        }
+        None => {}
     }
 }
 
@@ -97,8 +112,11 @@ fn render_list<T, F>(
     let list = List::new(items)
         .block(block)
         .highlight_symbol("> ")
-        .highlight_style(Style::default().reversed())
-        .bold()
+        .highlight_style(
+            Style::default()
+                .bg(Color::Rgb(45, 55, 72))
+                .add_modifier(Modifier::BOLD),
+        )
         .fg(Color::Blue);
 
     frame.render_stateful_widget(list, area, state);
@@ -111,4 +129,21 @@ fn render_details(frame: &mut Frame, area: Rect) {
         .style(Color::Blue)
         .alignment(HorizontalAlignment::Center);
     frame.render_widget(paragraph, area);
+}
+
+fn render_container_item(container: &DockerContainer) -> ListItem<'static> {
+    let color = match container.state.as_str() {
+        "running" => Color::Green,
+        "paused" | "restarting" => Color::Yellow,
+        "created" => Color::Blue,
+        "removing" => Color::Magenta,
+        "exited" => Color::Gray,
+        "dead" => Color::Red,
+        _ => Color::Reset,
+    };
+
+    let style = Style::default().fg(color);
+
+    let line = Line::from(vec![Span::styled(container.name.clone(), style)]);
+    ListItem::new(line)
 }

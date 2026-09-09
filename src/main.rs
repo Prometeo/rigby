@@ -3,6 +3,7 @@ mod image;
 mod networking;
 mod tui;
 mod utils;
+mod volume;
 use crate::tui::{app::App, tui::Tui};
 use color_eyre::Result;
 use ratatui::{Terminal, backend::CrosstermBackend};

@@ -2,6 +2,7 @@ use crate::container::{models::DockerContainer, service::list_containers};
 use crate::image::{models::DockerImage, service::list_images};
 use crate::networking::{models::DockerNetwork, service::list_networks};
 use crate::utils::driver_connector;
+use crate::volume::{models::DockerVolume, service::list_volumes};
 use bollard::Docker;
 use color_eyre::Result;
 use ratatui::widgets::ListState;
@@ -86,6 +87,7 @@ pub struct App {
     pub containers: StatefullList<DockerContainer>,
     pub images: StatefullList<DockerImage>,
     pub networks: StatefullList<DockerNetwork>,
+    pub volumes: StatefullList<DockerVolume>,
     pub client: Docker,
 }
 
@@ -118,7 +120,12 @@ impl App {
                 self.containers.select_first();
             }
 
-            Some(MenuItem::Volumes) => return Ok(()),
+            Some(MenuItem::Volumes) => {
+                if self.volumes.items.is_empty() {
+                    self.volumes.items = list_volumes(&self.client).await.unwrap_or_default();
+                }
+                self.volumes.select_first();
+            }
 
             Some(MenuItem::Networks) => {
                 if self.networks.items.is_empty() {
@@ -156,6 +163,7 @@ impl Default for App {
             containers: StatefullList::default(),
             images: StatefullList::default(),
             networks: StatefullList::default(),
+            volumes: StatefullList::default(),
             client,
         }
     }
