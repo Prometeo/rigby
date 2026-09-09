@@ -115,6 +115,8 @@ impl App {
         match self.menu.selected() {
             Some(MenuItem::Images) => self.images.move_up(),
             Some(MenuItem::Containers) => self.containers.move_up(),
+            Some(MenuItem::Networks) => self.networks.move_up(),
+            Some(MenuItem::Volumes) => self.volumes.move_up(),
             _ => {}
         }
     }
@@ -123,6 +125,8 @@ impl App {
         match self.menu.selected() {
             Some(MenuItem::Images) => self.images.move_down(),
             Some(MenuItem::Containers) => self.containers.move_down(),
+            Some(MenuItem::Networks) => self.networks.move_down(),
+            Some(MenuItem::Volumes) => self.volumes.move_down(),
             _ => {}
         }
     }
