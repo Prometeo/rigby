@@ -19,10 +19,12 @@ pub async fn update(app: &mut App, key_event: KeyEvent) -> Result<(), Report> {
                 app.menu.move_up();
 
                 if previous != app.menu.state.selected() {
-                    let i = app.menu_data_loaded().await?;
+                    app.menu_data_loaded().await?;
                 }
             }
-            Focus::Content => {}
+            Focus::ItemsList => {
+                app.move_items_list_up().await;
+            }
         },
 
         KeyCode::Down | KeyCode::Char('j') => match app.focus {
@@ -35,7 +37,9 @@ pub async fn update(app: &mut App, key_event: KeyEvent) -> Result<(), Report> {
                     app.menu_data_loaded().await?;
                 }
             }
-            Focus::Content => {}
+            Focus::ItemsList => {
+                app.move_items_list_down().await;
+            }
         },
 
         KeyCode::Tab => {

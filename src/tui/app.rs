@@ -11,7 +11,7 @@ use std::fmt;
 #[derive(PartialEq, Eq)]
 pub enum Focus {
     Menu,
-    Content,
+    ItemsList,
 }
 
 #[derive(Debug, Clone)]
@@ -102,13 +102,29 @@ impl App {
 
     pub fn toggle_focus(&mut self) {
         self.focus = match self.focus {
-            Focus::Menu => Focus::Content,
-            Focus::Content => Focus::Menu,
+            Focus::Menu => Focus::ItemsList,
+            Focus::ItemsList => Focus::Menu,
         }
     }
 
     pub async fn menu_data_loaded(&mut self) -> Result<()> {
         self.load_selected().await
+    }
+
+    pub async fn move_items_list_up(&mut self) {
+        match self.menu.selected() {
+            Some(MenuItem::Images) => self.images.move_up(),
+            Some(MenuItem::Containers) => self.containers.move_up(),
+            _ => {}
+        }
+    }
+
+    pub async fn move_items_list_down(&mut self) {
+        match self.menu.selected() {
+            Some(MenuItem::Images) => self.images.move_down(),
+            Some(MenuItem::Containers) => self.containers.move_down(),
+            _ => {}
+        }
     }
 
     pub async fn load_selected(&mut self) -> Result<()> {

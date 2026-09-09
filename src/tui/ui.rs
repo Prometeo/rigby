@@ -45,7 +45,7 @@ pub fn render(app: &mut App, frame: &mut Frame) {
                 &mut app.containers.state,
                 frame,
                 "Containers",
-                app.focus == Focus::Content,
+                app.focus == Focus::ItemsList,
                 render_container_item,
             );
         }
@@ -56,7 +56,7 @@ pub fn render(app: &mut App, frame: &mut Frame) {
                 &mut app.images.state,
                 frame,
                 "Images",
-                app.focus == Focus::Content,
+                app.focus == Focus::ItemsList,
                 |item| ListItem::new(item.to_string()),
             );
         }
@@ -67,7 +67,7 @@ pub fn render(app: &mut App, frame: &mut Frame) {
                 &mut app.networks.state,
                 frame,
                 "Networks",
-                app.focus == Focus::Content,
+                app.focus == Focus::ItemsList,
                 |item| ListItem::new(item.to_string()),
             );
         }
@@ -78,7 +78,7 @@ pub fn render(app: &mut App, frame: &mut Frame) {
                 &mut app.volumes.state,
                 frame,
                 "Volumes",
-                app.focus == Focus::Content,
+                app.focus == Focus::ItemsList,
                 |item| ListItem::new(item.to_string()),
             );
         }
