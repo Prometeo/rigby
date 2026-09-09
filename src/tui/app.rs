@@ -100,6 +100,13 @@ impl App {
         Ok(())
     }
 
+    pub fn toggle_focus(&mut self) {
+        self.focus = match self.focus {
+            Focus::Menu => Focus::Content,
+            Focus::Content => Focus::Menu,
+        }
+    }
+
     pub async fn menu_data_loaded(&mut self) -> Result<()> {
         self.load_selected().await
     }

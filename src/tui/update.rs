@@ -37,6 +37,10 @@ pub async fn update(app: &mut App, key_event: KeyEvent) -> Result<(), Report> {
             }
             Focus::Content => {}
         },
+
+        KeyCode::Tab => {
+            app.toggle_focus();
+        }
         _ => {}
     }
 
