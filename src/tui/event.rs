@@ -1,5 +1,5 @@
 use color_eyre::Result;
-use ratatui::crossterm::event::{self, Event as CrosstermEvent, KeyEvent, MouseEvent};
+use ratatui::crossterm::event::{self, Event as CrosstermEvent, KeyEvent};
 use std::{
     sync::mpsc::{self, Sender},
     thread,
@@ -10,8 +10,8 @@ pub enum Event {
     /// Terminal tick
     Tick,
     Key(KeyEvent),
-    Mouse(MouseEvent),
-    Resize(u16, u16),
+    Mouse(()),
+    Resize((), ()),
 }
 
 pub struct EventHandler {
@@ -44,8 +44,8 @@ impl EventHandler {
                                     Ok(()) // ignore KeyEventKind on windows
                                 }
                             }
-                            CrosstermEvent::Mouse(e) => sender.send(Event::Mouse(e)),
-                            CrosstermEvent::Resize(w, h) => sender.send(Event::Resize(w, h)),
+                            CrosstermEvent::Mouse(_e) => sender.send(Event::Mouse(())),
+                            CrosstermEvent::Resize(_w, _h) => sender.send(Event::Resize((), ())),
                             _ => unimplemented!(),
                         }
                         .expect("failed to send terminal event")

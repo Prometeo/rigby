@@ -5,10 +5,10 @@ use crate::{
 
 use ratatui::{
     Frame,
-    layout::{Constraint, Direction, HorizontalAlignment, Layout, Rect},
+    layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style, Stylize},
     text::{Line, Span},
-    widgets::{Block, BlockExt, BorderType, Borders, List, ListItem, ListState, Paragraph},
+    widgets::{Block, BorderType, Borders, List, ListItem, ListState, Paragraph},
 };
 
 pub fn render(app: &mut App, frame: &mut Frame) {
@@ -34,14 +34,6 @@ pub fn render(app: &mut App, frame: &mut Frame) {
         |item| ListItem::new(item.to_string()),
     );
 
-    // Render details pane
-    match app.menu.selected() {
-        Some(MenuItem::Images) => {
-            render_details(app, outer_layout[1], frame);
-        }
-        _ => {}
-    }
-
     match app.menu.selected() {
         Some(MenuItem::Containers) => {
             render_list(
@@ -64,6 +56,9 @@ pub fn render(app: &mut App, frame: &mut Frame) {
                 app.focus == Focus::ItemsList,
                 |item| ListItem::new(item.to_string()),
             );
+
+            // render image details
+            render_details(app, outer_layout[1], frame);
         }
         Some(MenuItem::Networks) => {
             render_list(

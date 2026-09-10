@@ -42,12 +42,12 @@ impl TryFrom<ContainerSummary> for DockerContainer {
 
         Ok(Self {
             id: container.id.unwrap_or_default(),
-            name: name,
+            name,
             image: container.image.unwrap_or_default(),
             created: "10/10/2020".into(),
             state: container.state.unwrap().to_string(),
             status: container.status.unwrap_or_default(),
-            ports: ports,
+            ports,
         })
     }
 }

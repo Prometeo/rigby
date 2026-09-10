@@ -4,7 +4,8 @@ mod networking;
 mod tui;
 mod utils;
 mod volume;
-use crate::tui::{app::App, tui::Tui};
+use crate::tui::{Tui, app::App};
+
 use color_eyre::Result;
 use ratatui::{Terminal, backend::CrosstermBackend};
 use tui::event::{Event, EventHandler};

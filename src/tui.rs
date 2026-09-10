@@ -1,4 +1,8 @@
-use crate::tui::ui;
+pub mod app;
+pub mod event;
+pub mod ui;
+pub mod update;
+
 use color_eyre::Result;
 use ratatui::crossterm::{
     event::{DisableMouseCapture, EnableMouseCapture},

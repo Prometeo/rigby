@@ -1,4 +1,4 @@
-use crate::tui::app::{App, Focus, MenuItem};
+use crate::tui::app::{App, Focus};
 use color_eyre::{Report, Result};
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
