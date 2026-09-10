@@ -8,37 +8,38 @@ use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style, Stylize},
     text::{Line, Span},
-    widgets::{Block, BorderType, Borders, List, ListItem, ListState, Paragraph},
+    widgets::{Block, BorderType, Borders, List, ListItem, ListState, Paragraph, Tabs},
 };
 
 pub fn render(app: &mut App, frame: &mut Frame) {
-    let outer_layout = Layout::default()
-        .direction(Direction::Horizontal)
+    let rows = Layout::default()
+        .direction(Direction::Vertical)
         .margin(1)
-        .constraints([Constraint::Percentage(20), Constraint::Percentage(80)])
+        .constraints([
+            Constraint::Length(3), // Height of tab bar (1 border top, 1 text, 1 border bottom)
+            Constraint::Min(0),    // Remaining vertical space
+        ])
         .split(frame.area());
 
-    let inner_layout = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([Constraint::Percentage(20), Constraint::Percentage(80)])
-        .split(outer_layout[0]);
+    let panels = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([
+            Constraint::Percentage(35), // Items list
+            Constraint::Percentage(65), // Details pane
+        ])
+        .split(rows[1]);
 
-    // Left main menu
-    render_list(
-        &app.menu.items,
-        outer_layout[0],
-        &mut app.menu.state,
-        frame,
-        "Menu",
-        app.focus == Focus::Menu,
-        |item| ListItem::new(item.to_string()),
-    );
+    // ----------------- Top Menu (Tabs) -----------------
+    render_menu_tabs(app, rows[0], frame);
+
+    // ----------------- Middle Items List -----------------
+    let items_area = panels[0];
 
     match app.menu.selected() {
         Some(MenuItem::Containers) => {
             render_list(
                 &app.containers.items,
-                inner_layout[1],
+                items_area,
                 &mut app.containers.state,
                 frame,
                 "Containers",
@@ -49,21 +50,18 @@ pub fn render(app: &mut App, frame: &mut Frame) {
         Some(MenuItem::Images) => {
             render_list(
                 &app.images.items,
-                inner_layout[1],
+                items_area,
                 &mut app.images.state,
                 frame,
                 "Images",
                 app.focus == Focus::ItemsList,
                 |item| ListItem::new(item.to_string()),
             );
-
-            // render image details
-            render_details(app, outer_layout[1], frame);
         }
         Some(MenuItem::Networks) => {
             render_list(
                 &app.networks.items,
-                inner_layout[1],
+                items_area,
                 &mut app.networks.state,
                 frame,
                 "Networks",
@@ -74,7 +72,7 @@ pub fn render(app: &mut App, frame: &mut Frame) {
         Some(MenuItem::Volumes) => {
             render_list(
                 &app.volumes.items,
-                inner_layout[1],
+                items_area,
                 &mut app.volumes.state,
                 frame,
                 "Volumes",
@@ -84,6 +82,47 @@ pub fn render(app: &mut App, frame: &mut Frame) {
         }
         None => {}
     }
+
+    // ----------------- Right Details Pane -----------------
+    render_details(app, panels[1], frame);
+}
+
+fn render_menu_tabs(app: &App, area: Rect, frame: &mut Frame) {
+    let titles: Vec<Line> = app
+        .menu
+        .items
+        .iter()
+        .enumerate()
+        .map(|(i, item)| {
+            Line::from(vec![
+                Span::styled(
+                    format!(" [{}] ", i + 1),
+                    Style::default().fg(Color::LightGreen),
+                ),
+                Span::raw(item.to_string()),
+                Span::raw(" "),
+            ])
+        })
+        .collect();
+
+    let selected_index = app.menu.state.selected().unwrap_or(0);
+
+    let block = Block::bordered()
+        .title("Menu")
+        .border_type(BorderType::Thick)
+        .border_style(Style::default().fg(Color::Green));
+
+    let tabs = Tabs::new(titles)
+        .block(block)
+        .select(selected_index)
+        .highlight_style(
+            Style::default()
+                .fg(Color::Yellow)
+                .add_modifier(Modifier::BOLD),
+        )
+        .divider("|");
+
+    frame.render_widget(tabs, area);
 }
 
 fn render_list<T, F>(

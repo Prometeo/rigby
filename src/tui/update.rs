@@ -12,31 +12,17 @@ pub async fn update(app: &mut App, key_event: KeyEvent) -> Result<(), Report> {
             app.quit();
         }
 
+        KeyCode::Char(c @ ('1' | '2' | '3' | '4')) => {
+            app.select_menu_item(c).await;
+        }
+
         KeyCode::Up | KeyCode::Char('k') => match app.focus {
-            Focus::Menu => {
-                let previous = app.menu.state.selected();
-
-                app.menu.move_up();
-
-                if previous != app.menu.state.selected() {
-                    app.menu_data_loaded().await?;
-                }
-            }
             Focus::ItemsList => {
                 app.move_items_list_up().await;
             }
         },
 
         KeyCode::Down | KeyCode::Char('j') => match app.focus {
-            Focus::Menu => {
-                let previous = app.menu.state.selected();
-
-                app.menu.move_down();
-
-                if previous != app.menu.state.selected() {
-                    app.menu_data_loaded().await?;
-                }
-            }
             Focus::ItemsList => {
                 app.move_items_list_down().await;
             }

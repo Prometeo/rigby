@@ -13,7 +13,6 @@ use std::fmt;
 
 #[derive(PartialEq, Eq)]
 pub enum Focus {
-    Menu,
     ItemsList,
 }
 
@@ -118,12 +117,11 @@ impl App {
 
     pub fn toggle_focus(&mut self) {
         self.focus = match self.focus {
-            Focus::Menu => Focus::ItemsList,
-            Focus::ItemsList => Focus::Menu,
+            Focus::ItemsList => Focus::ItemsList,
         }
     }
 
-    pub async fn menu_data_loaded(&mut self) -> Result<()> {
+    pub async fn menu_data_loaded(&mut self) {
         self.load_selected().await
     }
 
@@ -151,7 +149,18 @@ impl App {
         self.load_selected_details().await;
     }
 
-    pub async fn load_selected(&mut self) -> Result<()> {
+    pub async fn select_menu_item(&mut self, option: char) {
+        match option {
+            '1' => self.menu.state.select(Some(0)),
+            '2' => self.menu.state.select(Some(1)),
+            '3' => self.menu.state.select(Some(2)),
+            '4' => self.menu.state.select(Some(3)),
+            _ => {}
+        }
+        self.load_selected().await;
+    }
+
+    pub async fn load_selected(&mut self) {
         match self.menu.selected() {
             Some(MenuItem::Images) => {
                 if self.images.items.is_empty() {
@@ -184,8 +193,6 @@ impl App {
         }
 
         self.load_selected_details().await;
-
-        Ok(())
     }
 
     pub async fn load_selected_details(&mut self) {
@@ -224,7 +231,7 @@ impl Default for App {
         Self {
             quit: false,
             menu,
-            focus: Focus::Menu,
+            focus: Focus::ItemsList,
             containers: StatefullList::default(),
             images: StatefullList::default(),
             networks: StatefullList::default(),

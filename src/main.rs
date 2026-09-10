@@ -15,7 +15,7 @@ use tui::update::update;
 async fn main() -> Result<()> {
     // Create an application.
     let mut app: App = App::new();
-    app.menu_data_loaded().await?;
+    app.menu_data_loaded().await;
 
     // Initialize the terminal user interface.
     let backend = CrosstermBackend::new(std::io::stderr());
