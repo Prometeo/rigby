@@ -1,5 +1,8 @@
 use crate::container::{models::DockerContainer, service::list_containers};
-use crate::image::{models::DockerImage, service::list_images};
+use crate::image::{
+    models::{DockerImage, DockerImageDetail},
+    service::{inspect_image, list_images},
+};
 use crate::networking::{models::DockerNetwork, service::list_networks};
 use crate::utils::driver_connector;
 use crate::volume::{models::DockerVolume, service::list_volumes};
@@ -29,6 +32,18 @@ impl fmt::Display for MenuItem {
             MenuItem::Containers => write!(f, "Containers"),
             MenuItem::Volumes => write!(f, "Volumes"),
             MenuItem::Networks => write!(f, "Networks"),
+        }
+    }
+}
+
+pub enum Details {
+    Image(DockerImageDetail),
+}
+
+impl fmt::Display for Details {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Details::Image(details) => write!(f, "{details}"),
         }
     }
 }
@@ -89,6 +104,7 @@ pub struct App {
     pub networks: StatefullList<DockerNetwork>,
     pub volumes: StatefullList<DockerVolume>,
     pub client: Docker,
+    pub details: Option<Details>,
 }
 
 impl App {
@@ -119,6 +135,8 @@ impl App {
             Some(MenuItem::Volumes) => self.volumes.move_up(),
             _ => {}
         }
+
+        self.load_selected_details().await;
     }
 
     pub async fn move_items_list_down(&mut self) {
@@ -129,6 +147,8 @@ impl App {
             Some(MenuItem::Volumes) => self.volumes.move_down(),
             _ => {}
         }
+
+        self.load_selected_details().await;
     }
 
     pub async fn load_selected(&mut self) -> Result<()> {
@@ -163,7 +183,25 @@ impl App {
             None => {}
         }
 
+        self.load_selected_details().await;
+
         Ok(())
+    }
+
+    pub async fn load_selected_details(&mut self) {
+        match self.menu.selected() {
+            Some(MenuItem::Images) => {
+                let Some(image) = self.images.selected().cloned() else {
+                    self.details = None;
+                    return;
+                };
+
+                if let Ok(details) = inspect_image(&self.client, &image).await {
+                    self.details = Some(Details::Image(details))
+                };
+            }
+            _ => {}
+        };
     }
 
     pub fn quit(&mut self) {
@@ -192,6 +230,7 @@ impl Default for App {
             networks: StatefullList::default(),
             volumes: StatefullList::default(),
             client,
+            details: None,
         }
     }
 }

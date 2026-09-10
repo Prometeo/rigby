@@ -8,7 +8,7 @@ use ratatui::{
     layout::{Constraint, Direction, HorizontalAlignment, Layout, Rect},
     style::{Color, Modifier, Style, Stylize},
     text::{Line, Span},
-    widgets::{Block, BorderType, Borders, List, ListItem, ListState, Paragraph},
+    widgets::{Block, BlockExt, BorderType, Borders, List, ListItem, ListState, Paragraph},
 };
 
 pub fn render(app: &mut App, frame: &mut Frame) {
@@ -35,7 +35,12 @@ pub fn render(app: &mut App, frame: &mut Frame) {
     );
 
     // Render details pane
-    render_details(frame, outer_layout[1]);
+    match app.menu.selected() {
+        Some(MenuItem::Images) => {
+            render_details(app, outer_layout[1], frame);
+        }
+        _ => {}
+    }
 
     match app.menu.selected() {
         Some(MenuItem::Containers) => {
@@ -122,12 +127,14 @@ fn render_list<T, F>(
     frame.render_stateful_widget(list, area, state);
 }
 
-fn render_details(frame: &mut Frame, area: Rect) {
-    let text: &str = "Content Detail";
-    let paragraph = Paragraph::new(text)
-        .block(Block::bordered().title("Details"))
-        .style(Color::Blue)
-        .alignment(HorizontalAlignment::Center);
+fn render_details(app: &App, area: Rect, frame: &mut Frame) {
+    let details: String = app
+        .details
+        .as_ref()
+        .map(ToString::to_string)
+        .unwrap_or("Nothing Selected".into());
+
+    let paragraph = Paragraph::new(details).block(Block::bordered().title("Details"));
     frame.render_widget(paragraph, area);
 }
 
