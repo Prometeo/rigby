@@ -1,4 +1,7 @@
-use crate::container::{models::DockerContainer, service::list_containers};
+use crate::container::{
+    models::{DockerContainer, DockerContainerDetail},
+    service::{inspect_container, list_containers},
+};
 use crate::image::{
     models::{DockerImage, DockerImageDetail},
     service::{inspect_image, list_images},
@@ -37,12 +40,14 @@ impl fmt::Display for MenuItem {
 
 pub enum Details {
     Image(DockerImageDetail),
+    Container(DockerContainerDetail),
 }
 
 impl fmt::Display for Details {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Details::Image(details) => write!(f, "{details}"),
+            Details::Container(details) => write!(f, "{details}"),
         }
     }
 }
@@ -206,6 +211,16 @@ impl App {
                 if let Ok(details) = inspect_image(&self.client, &image).await {
                     self.details = Some(Details::Image(details))
                 };
+            }
+            Some(MenuItem::Containers) => {
+                let Some(container) = self.containers.selected().cloned() else {
+                    self.details = None;
+                    return;
+                };
+
+                if let Ok(details) = inspect_container(&self.client, &container).await {
+                    self.details = Some(Details::Container(details))
+                }
             }
             _ => {}
         };

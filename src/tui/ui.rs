@@ -15,18 +15,12 @@ pub fn render(app: &mut App, frame: &mut Frame) {
     let rows = Layout::default()
         .direction(Direction::Vertical)
         .margin(1)
-        .constraints([
-            Constraint::Length(3), // Height of tab bar (1 border top, 1 text, 1 border bottom)
-            Constraint::Min(0),    // Remaining vertical space
-        ])
+        .constraints([Constraint::Length(3), Constraint::Min(0)])
         .split(frame.area());
 
     let panels = Layout::default()
         .direction(Direction::Horizontal)
-        .constraints([
-            Constraint::Percentage(35), // Items list
-            Constraint::Percentage(65), // Details pane
-        ])
+        .constraints([Constraint::Percentage(35), Constraint::Percentage(65)])
         .split(rows[1]);
 
     // ----------------- Top Menu (Tabs) -----------------
