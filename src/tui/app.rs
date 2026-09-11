@@ -1,7 +1,3 @@
-use crate::container::{
-    models::{DockerContainer, DockerContainerDetail},
-    service::{inspect_container, list_containers},
-};
 use crate::image::{
     models::{DockerImage, DockerImageDetail},
     service::{inspect_image, list_images},
@@ -11,7 +7,17 @@ use crate::networking::{
     service::{inspect_network, list_networks},
 };
 use crate::utils::driver_connector;
-use crate::volume::{models::DockerVolume, service::list_volumes};
+use crate::volume::{
+    models::{DockerVolume, DockerVolumeDetail},
+    service::list_volumes,
+};
+use crate::{
+    container::{
+        models::{DockerContainer, DockerContainerDetail},
+        service::{inspect_container, list_containers},
+    },
+    volume::service::inspect_volume,
+};
 use bollard::Docker;
 use color_eyre::Result;
 use ratatui::widgets::ListState;
@@ -44,6 +50,7 @@ impl fmt::Display for MenuItem {
 pub enum Details {
     Image(DockerImageDetail),
     Container(DockerContainerDetail),
+    Volume(DockerVolumeDetail),
     Network(DockerNetworkDetail),
 }
 
@@ -53,6 +60,7 @@ impl fmt::Display for Details {
             Details::Image(details) => write!(f, "{details}"),
             Details::Container(details) => write!(f, "{details}"),
             Details::Network(details) => write!(f, "{details}"),
+            Details::Volume(details) => write!(f, "{details}"),
         }
     }
 }
@@ -199,6 +207,7 @@ impl App {
                 }
                 self.containers.select_first();
             }
+
             None => {}
         }
 
@@ -217,6 +226,7 @@ impl App {
                     self.details = Some(Details::Image(details))
                 };
             }
+
             Some(MenuItem::Containers) => {
                 let Some(container) = self.containers.selected().cloned() else {
                     self.details = None;
@@ -227,6 +237,18 @@ impl App {
                     self.details = Some(Details::Container(details))
                 }
             }
+
+            Some(MenuItem::Volumes) => {
+                let Some(volume) = self.volumes.selected().cloned() else {
+                    self.details = None;
+                    return;
+                };
+
+                if let Ok(details) = inspect_volume(&self.client, &volume).await {
+                    self.details = Some(Details::Volume(details))
+                }
+            }
+
             Some(MenuItem::Networks) => {
                 let Some(network) = self.networks.selected().cloned() else {
                     self.details = None;
@@ -237,7 +259,8 @@ impl App {
                     self.details = Some(Details::Network(details))
                 }
             }
-            _ => {}
+
+            None => {}
         };
     }
 

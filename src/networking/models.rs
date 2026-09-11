@@ -161,7 +161,7 @@ impl fmt::Display for DockerNetworkDetail {
             width = field_width
         )?;
         writeln!(f, "{:<width$}{}", "Options", options, width = field_width)?;
-        // IPAM
+
         writeln!(f, "{:<width$}{}", "Labels", labels, width = field_width)?;
         writeln!(
             f,
