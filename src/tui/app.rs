@@ -14,7 +14,7 @@ use crate::volume::{
 use crate::{
     container::{
         models::{DockerContainer, DockerContainerDetail},
-        service::{inspect_container, list_containers},
+        service::{get_container_logs, inspect_container, list_containers},
     },
     volume::service::inspect_volume,
 };
@@ -112,6 +112,13 @@ impl<T> Default for StatefullList<T> {
     }
 }
 
+#[derive(Default)]
+pub enum ContainerTab {
+    #[default]
+    Details,
+    Logs,
+}
+
 pub struct App {
     pub quit: bool,
     pub menu: StatefullList<MenuItem>,
@@ -122,6 +129,8 @@ pub struct App {
     pub volumes: StatefullList<DockerVolume>,
     pub client: Docker,
     pub details: Option<Details>,
+    pub container_tab: ContainerTab,
+    pub container_logs: Vec<String>,
 }
 
 impl App {
@@ -264,6 +273,24 @@ impl App {
         };
     }
 
+    pub async fn togle_container_tab(&mut self) {
+        self.container_tab = match self.container_tab {
+            ContainerTab::Details => ContainerTab::Logs,
+            ContainerTab::Logs => ContainerTab::Details,
+        };
+
+        match self.container_tab {
+            ContainerTab::Logs => {
+                if let Some(container) = self.containers.selected().cloned() {
+                    self.container_logs = get_container_logs(&self.client, &container.id, 100)
+                        .await
+                        .unwrap_or_default();
+                }
+            }
+            ContainerTab::Details => {}
+        }
+    }
+
     pub fn quit(&mut self) {
         self.quit = true;
     }
@@ -291,6 +318,8 @@ impl Default for App {
             volumes: StatefullList::default(),
             client,
             details: None,
+            container_tab: ContainerTab::Details,
+            container_logs: vec![String::default()],
         }
     }
 }

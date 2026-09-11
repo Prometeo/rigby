@@ -29,7 +29,7 @@ pub async fn update(app: &mut App, key_event: KeyEvent) -> Result<(), Report> {
         },
 
         KeyCode::Tab => {
-            app.toggle_focus();
+            app.togle_container_tab().await;
         }
         _ => {}
     }
