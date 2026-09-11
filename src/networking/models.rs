@@ -173,28 +173,25 @@ impl fmt::Display for DockerNetworkDetail {
         for config in &self.ipam.configs {
             writeln!(
                 f,
-                "{:<width$}{}",
+                "{:<width$}Subnet: {}",
                 "",
-                format!("Subnet: {}", config.subnet.as_deref().unwrap_or("<none>")),
+                config.subnet.as_deref().unwrap_or("<none>"),
                 width = field_width
             )?;
 
             writeln!(
                 f,
-                "{:<width$}{}",
+                "{:<width$}Gateway: {}",
                 "",
-                format!("Gateway: {}", config.gateway.as_deref().unwrap_or("<none>")),
+                config.gateway.as_deref().unwrap_or("<none>"),
                 width = field_width
             )?;
 
             writeln!(
                 f,
-                "{:<width$}{}",
+                "{:<width$} IPRange: {}",
                 "",
-                format!(
-                    "IPRange: {}",
-                    config.ip_range.as_deref().unwrap_or("<none>")
-                ),
+                config.ip_range.as_deref().unwrap_or("<none>"),
                 width = field_width
             )?;
         }

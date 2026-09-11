@@ -19,5 +19,5 @@ pub async fn inspect_container(
     container: &DockerContainer,
 ) -> Result<DockerContainerDetail> {
     let container_info = client.inspect_container(&container.id, None).await?;
-    Ok(DockerContainerDetail::new(&container_info, &container))
+    Ok(DockerContainerDetail::new(&container_info, container))
 }
