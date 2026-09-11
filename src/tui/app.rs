@@ -6,7 +6,10 @@ use crate::image::{
     models::{DockerImage, DockerImageDetail},
     service::{inspect_image, list_images},
 };
-use crate::networking::{models::DockerNetwork, service::list_networks};
+use crate::networking::{
+    models::{DockerNetwork, DockerNetworkDetail},
+    service::{inspect_network, list_networks},
+};
 use crate::utils::driver_connector;
 use crate::volume::{models::DockerVolume, service::list_volumes};
 use bollard::Docker;
@@ -41,6 +44,7 @@ impl fmt::Display for MenuItem {
 pub enum Details {
     Image(DockerImageDetail),
     Container(DockerContainerDetail),
+    Network(DockerNetworkDetail),
 }
 
 impl fmt::Display for Details {
@@ -48,6 +52,7 @@ impl fmt::Display for Details {
         match self {
             Details::Image(details) => write!(f, "{details}"),
             Details::Container(details) => write!(f, "{details}"),
+            Details::Network(details) => write!(f, "{details}"),
         }
     }
 }
@@ -220,6 +225,16 @@ impl App {
 
                 if let Ok(details) = inspect_container(&self.client, &container).await {
                     self.details = Some(Details::Container(details))
+                }
+            }
+            Some(MenuItem::Networks) => {
+                let Some(network) = self.networks.selected().cloned() else {
+                    self.details = None;
+                    return;
+                };
+
+                if let Ok(details) = inspect_network(&self.client, &network).await {
+                    self.details = Some(Details::Network(details))
                 }
             }
             _ => {}
