@@ -9,9 +9,14 @@ use ratatui::crossterm::{
     execute,
     terminal::{self, EnterAlternateScreen, LeaveAlternateScreen},
 };
-use std::{io, panic};
+use std::{
+    io::{self, BufWriter, Stderr},
+    panic,
+};
 
-pub type CrosstermTerminal = ratatui::Terminal<ratatui::backend::CrosstermBackend<std::io::Stderr>>;
+// Change Stderr to BufWriter<Stderr>
+pub type CrosstermTerminal =
+    ratatui::Terminal<ratatui::backend::CrosstermBackend<BufWriter<Stderr>>>;
 use crate::tui::{app::App, event::EventHandler};
 
 pub struct Tui {
@@ -29,7 +34,6 @@ impl Tui {
         execute!(io::stderr(), EnterAlternateScreen, EnableMouseCapture)?;
 
         // Define a custom panic hook to reset the terminal properties.
-        // This way, you won't have your terminal messed up if an unexpected error happens.
         let panic_hook = panic::take_hook();
         panic::set_hook(Box::new(move |panic| {
             Self::reset().expect("failed to reset the terminal");

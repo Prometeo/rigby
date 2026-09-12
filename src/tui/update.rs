@@ -20,16 +20,40 @@ pub async fn update(app: &mut App, key_event: KeyEvent) -> Result<(), Report> {
             Focus::ItemsList => {
                 app.move_items_list_up().await;
             }
+            Focus::Content => {
+                app.logs_scroll_up();
+            }
         },
 
         KeyCode::Down | KeyCode::Char('j') => match app.focus {
             Focus::ItemsList => {
                 app.move_items_list_down().await;
             }
+            Focus::Content => {
+                app.logs_scroll_logs_down();
+            }
         },
 
-        KeyCode::Tab => {
+        KeyCode::Char('g') => match app.focus {
+            Focus::Content => {
+                app.logs_scroll_to_top();
+            }
+            Focus::ItemsList => {}
+        },
+
+        KeyCode::Char('G') => match app.focus {
+            Focus::Content => {
+                app.logs_scroll_to_bottom();
+            }
+            Focus::ItemsList => {}
+        },
+
+        KeyCode::Left | KeyCode::Right => {
             app.togle_container_tab().await;
+        }
+
+        KeyCode::Tab => {
+            app.toggle_focus();
         }
         _ => {}
     }

@@ -7,7 +7,10 @@ use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style, Stylize},
     text::{Line, Span, Text},
-    widgets::{Block, BorderType, Borders, List, ListItem, ListState, Paragraph, Tabs},
+    widgets::{
+        Block, BorderType, Borders, List, ListItem, ListState, Paragraph, Scrollbar,
+        ScrollbarOrientation, ScrollbarState, Tabs,
+    },
 };
 use std::rc::Rc;
 
@@ -78,7 +81,7 @@ pub fn render(app: &mut App, frame: &mut Frame) {
     }
 
     // ----------------- Right Details Pane -----------------
-    render_details(app, panels[1], frame);
+    render_content(app, panels[1], frame, app.focus == Focus::Content);
 }
 
 fn render_menu_tabs(app: &App, area: Rect, frame: &mut Frame) {
@@ -155,7 +158,7 @@ fn render_list<T, F>(
     frame.render_stateful_widget(list, area, state);
 }
 
-fn render_details(app: &App, area: Rect, frame: &mut Frame) {
+fn render_content(app: &mut App, area: Rect, frame: &mut Frame, focused: bool) {
     // Split the right area vertically: tabs at the top, content below
     let rows = Layout::default()
         .direction(Direction::Vertical)
@@ -165,7 +168,20 @@ fn render_details(app: &App, area: Rect, frame: &mut Frame) {
 
     let content_area = rows[1];
 
-    let (content, title, scroll_offset): (Text, &str, u16) = match app.container_tab {
+    let make_block = |title: &str| {
+        let title_owned = title.to_string();
+        if focused {
+            Block::bordered()
+                .title(title_owned)
+                .borders(Borders::ALL)
+                .border_type(BorderType::Thick)
+                .border_style(Style::default().fg(Color::Green))
+        } else {
+            Block::bordered().title(title_owned).borders(Borders::ALL)
+        }
+    };
+
+    match app.container_tab {
         ContainerTab::Details => {
             let details = app
                 .details
@@ -173,30 +189,13 @@ fn render_details(app: &App, area: Rect, frame: &mut Frame) {
                 .map(ToString::to_string)
                 .unwrap_or_else(|| "Nothing Selected".into());
 
-            (Text::from(details), "Details", 0)
+            let paragraph = Paragraph::new(Text::from(details)).block(make_block(" Details "));
+
+            frame.render_widget(paragraph, content_area);
         }
 
-        ContainerTab::Logs => {
-            if app.container_logs.is_empty() {
-                (Text::from("No logs available"), "Logs", 0)
-            } else {
-                let lines: Vec<Line> = app
-                    .container_logs
-                    .iter()
-                    .map(|log| Line::raw(log.clone()))
-                    .collect();
-                let total_lines: u16 = lines.len() as u16;
-                let visible_height = content_area.height.saturating_sub(2);
-                let offset = total_lines.saturating_sub(visible_height);
-                (Text::from(lines), "Logs", offset)
-            }
-        }
-    };
-
-    let paragraph = Paragraph::new(content)
-        .block(Block::bordered().title(title))
-        .scroll((scroll_offset, 0));
-    frame.render_widget(paragraph, content_area);
+        ContainerTab::Logs => render_logs(app, make_block, frame, content_area),
+    }
 }
 
 fn render_container_item(container: &DockerContainer) -> ListItem<'static> {
@@ -238,4 +237,63 @@ fn render_detail_tabs(app: &App, frame: &mut Frame, rows: &Rc<[Rect]>) {
         .divider("|");
 
     frame.render_widget(tabs, rows[0]);
+}
+
+fn render_logs<F>(app: &mut App, make_block: F, frame: &mut Frame, area: Rect)
+where
+    F: Fn(&str) -> Block<'static>,
+{
+    if app.container_logs.is_empty() {
+        let paragraph = Paragraph::new(Text::from("No logs available")).block(make_block(" Logs "));
+        frame.render_widget(paragraph, area);
+        return;
+    }
+
+    let visible_height = area.height.saturating_sub(2);
+    app.log_visible_height = visible_height;
+
+    let total_lines = app.container_logs.len();
+    let v_height = visible_height as usize;
+    let max_scroll = total_lines.saturating_sub(v_height);
+
+    let current_scroll = if app.log_auto_scroll {
+        max_scroll
+    } else {
+        (app.log_scroll as usize).min(max_scroll)
+    };
+
+    let start = current_scroll;
+    let end = (start + v_height).min(total_lines);
+
+    let visible_lines: Vec<Line> = app.container_logs[start..end]
+        .iter()
+        .map(|log| {
+            if log.starts_with("[ERR]") {
+                Line::from(Span::styled(log.as_str(), Style::default().fg(Color::Red)))
+            } else {
+                Line::from(log.as_str())
+            }
+        })
+        .collect();
+
+    let title = if app.log_auto_scroll {
+        " Logs [FOLLOWING - Press 'k'/Up to pause] "
+    } else {
+        " Logs [PAUSED - Press 'G' to resume follow] "
+    };
+
+    let paragraph = Paragraph::new(Text::from(visible_lines)).block(make_block(title));
+
+    frame.render_widget(paragraph, area);
+
+    let mut scrollbar_state = ScrollbarState::new(max_scroll).position(current_scroll);
+
+    frame.render_stateful_widget(
+        Scrollbar::default()
+            .orientation(ScrollbarOrientation::VerticalRight)
+            .begin_symbol(Some("↑"))
+            .end_symbol(Some("↓")),
+        area,
+        &mut scrollbar_state,
+    );
 }

@@ -71,4 +71,8 @@ impl EventHandler {
     pub fn next(&self) -> Result<Event> {
         Ok(self.receiver.recv()?)
     }
+
+    pub fn try_next(&self) -> Result<Event, std::sync::mpsc::TryRecvError> {
+        self.receiver.try_recv()
+    }
 }

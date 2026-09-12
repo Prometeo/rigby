@@ -23,13 +23,14 @@ use color_eyre::Result;
 use ratatui::widgets::ListState;
 use std::fmt;
 use std::time::Duration;
-use std::time::Instant;
 use tokio::sync::mpsc::UnboundedReceiver;
+use tokio::sync::mpsc::unbounded_channel;
 use tokio::task::AbortHandle;
 
 #[derive(PartialEq, Eq)]
 pub enum Focus {
     ItemsList,
+    Content,
 }
 
 #[derive(Debug, Clone)]
@@ -116,6 +117,13 @@ impl<T> Default for StatefullList<T> {
     }
 }
 
+pub struct DockerPollData {
+    pub containers: Vec<DockerContainer>,
+    pub images: Vec<DockerImage>,
+    pub volumes: Vec<DockerVolume>,
+    pub networks: Vec<DockerNetwork>,
+}
+
 #[derive(Default, PartialEq, Eq)]
 pub enum ContainerTab {
     #[default]
@@ -137,7 +145,10 @@ pub struct App {
     pub container_logs: Vec<String>,
     pub log_rx: Option<UnboundedReceiver<String>>,
     pub log_abort_handle: Option<AbortHandle>,
-    pub last_refresh: Instant,
+    pub log_scroll: u16,
+    pub log_auto_scroll: bool,
+    pub log_visible_height: u16,
+    pub poll_rx: Option<UnboundedReceiver<DockerPollData>>,
 }
 
 impl App {
@@ -146,21 +157,65 @@ impl App {
     }
 
     pub async fn tick(&mut self) -> Result<()> {
+        const MAX_LOG_LINES: usize = 5000;
+
         if let Some(rx) = self.log_rx.as_mut() {
             while let Ok(line) = rx.try_recv() {
                 self.container_logs.push(line);
             }
+
+            if self.container_logs.len() > MAX_LOG_LINES {
+                let excess = self.container_logs.len() - MAX_LOG_LINES;
+                self.container_logs.drain(0..excess);
+                self.log_scroll = self.log_scroll.saturating_sub(excess as u16);
+            }
         }
 
-        if self.last_refresh.elapsed() >= Duration::from_secs(1) {
-            self.containers.items = list_containers(&self.client).await.unwrap_or_default();
-            self.images.items = list_images(&self.client).await.unwrap_or_default();
-            self.volumes.items = list_volumes(&self.client).await.unwrap_or_default();
-            self.networks.items = list_networks(&self.client).await.unwrap_or_default();
-            self.last_refresh = Instant::now();
+        // Non-blocking update from background poller (takes 0ms)
+        if let Some(rx) = self.poll_rx.as_mut() {
+            while let Ok(data) = rx.try_recv() {
+                self.containers.items = data.containers;
+                self.images.items = data.images;
+                self.volumes.items = data.volumes;
+                self.networks.items = data.networks;
+            }
         }
 
         Ok(())
+    }
+
+    pub fn logs_scroll_up(&mut self) {
+        let total_lines = self.container_logs.len() as u16;
+        let max_scroll = total_lines.saturating_sub(self.log_visible_height);
+
+        if self.log_auto_scroll {
+            self.log_auto_scroll = false;
+            self.log_scroll = max_scroll.saturating_sub(1);
+        } else {
+            self.log_scroll = self.log_scroll.saturating_sub(1);
+        }
+    }
+
+    pub fn logs_scroll_logs_down(&mut self) {
+        let total_lines = self.container_logs.len() as u16;
+        let max_scroll = total_lines.saturating_sub(self.log_visible_height);
+
+        self.log_scroll = self.log_scroll.saturating_add(1);
+
+        if self.log_scroll >= max_scroll {
+            self.log_auto_scroll = true;
+        }
+    }
+
+    pub fn logs_scroll_to_top(&mut self) {
+        self.log_auto_scroll = false;
+        self.log_scroll = 0;
+    }
+
+    pub fn logs_scroll_to_bottom(&mut self) {
+        self.log_auto_scroll = true;
+        let total_lines = self.container_logs.len() as u16;
+        self.log_scroll = total_lines.saturating_sub(self.log_visible_height);
     }
 
     pub fn start_logs_stream(&mut self) {
@@ -183,7 +238,8 @@ impl App {
 
     pub fn toggle_focus(&mut self) {
         self.focus = match self.focus {
-            Focus::ItemsList => Focus::ItemsList,
+            Focus::ItemsList => Focus::Content,
+            Focus::Content => Focus::ItemsList,
         }
     }
 
@@ -369,7 +425,42 @@ impl Default for App {
             container_logs: vec![String::default()],
             log_rx: None,
             log_abort_handle: None,
-            last_refresh: Instant::now(),
+            log_scroll: 0,
+            log_auto_scroll: true,
+            log_visible_height: 20,
+            poll_rx: None,
         }
     }
+}
+
+pub fn spawn_docker_poller(client: Docker) -> UnboundedReceiver<DockerPollData> {
+    let (tx, rx) = unbounded_channel();
+
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(Duration::from_secs(1));
+        loop {
+            interval.tick().await;
+
+            // Fetch in parallel or sequentially in background without touching UI thread
+            let (containers, images, volumes, networks) = tokio::join!(
+                list_containers(&client),
+                list_images(&client),
+                list_volumes(&client),
+                list_networks(&client),
+            );
+
+            let data = DockerPollData {
+                containers: containers.unwrap_or_default(),
+                images: images.unwrap_or_default(),
+                volumes: volumes.unwrap_or_default(),
+                networks: networks.unwrap_or_default(),
+            };
+
+            if tx.send(data).is_err() {
+                break;
+            }
+        }
+    });
+
+    rx
 }
