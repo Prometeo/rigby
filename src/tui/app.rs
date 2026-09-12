@@ -22,6 +22,7 @@ use bollard::Docker;
 use color_eyre::Result;
 use ratatui::widgets::ListState;
 use std::fmt;
+use std::time::Instant;
 use tokio::sync::mpsc::UnboundedReceiver;
 use tokio::task::AbortHandle;
 
@@ -114,7 +115,7 @@ impl<T> Default for StatefullList<T> {
     }
 }
 
-#[derive(Default)]
+#[derive(Default, PartialEq, Eq)]
 pub enum ContainerTab {
     #[default]
     Details,
@@ -135,6 +136,7 @@ pub struct App {
     pub container_logs: Vec<String>,
     pub log_rx: Option<UnboundedReceiver<String>>,
     pub log_abort_handle: Option<AbortHandle>,
+    pub last_refresh: Instant,
 }
 
 impl App {
@@ -188,7 +190,11 @@ impl App {
             _ => {}
         }
 
-        self.load_selected_details().await;
+        if self.container_tab == ContainerTab::Logs {
+            self.start_logs_stream();
+        } else {
+            self.load_selected_details().await;
+        }
     }
 
     pub async fn move_items_list_down(&mut self) {
@@ -200,7 +206,11 @@ impl App {
             _ => {}
         }
 
-        self.load_selected_details().await;
+        if self.container_tab == ContainerTab::Logs {
+            self.start_logs_stream();
+        } else {
+            self.load_selected_details().await;
+        }
     }
 
     pub async fn select_menu_item(&mut self, option: char) {
@@ -221,12 +231,14 @@ impl App {
                     self.images.items = list_images(&self.client).await.unwrap_or_default();
                 }
                 self.images.select_first();
+                self.load_selected_details().await;
             }
 
             Some(MenuItem::Containers) => {
                 if self.containers.items.is_empty() {
                     self.containers.items = list_containers(&self.client).await.unwrap_or_default();
                 }
+                self.container_tab = ContainerTab::Details;
                 self.containers.select_first();
             }
 
@@ -235,6 +247,7 @@ impl App {
                     self.volumes.items = list_volumes(&self.client).await.unwrap_or_default();
                 }
                 self.volumes.select_first();
+                self.load_selected_details().await;
             }
 
             Some(MenuItem::Networks) => {
@@ -242,11 +255,11 @@ impl App {
                     self.networks.items = list_networks(&self.client).await.unwrap_or_default();
                 }
                 self.networks.select_first();
+                self.load_selected_details().await;
             }
 
             None => {}
         }
-
         self.load_selected_details().await;
     }
 
@@ -346,6 +359,7 @@ impl Default for App {
             container_logs: vec![String::default()],
             log_rx: None,
             log_abort_handle: None,
+            last_refresh: Instant::now(),
         }
     }
 }
