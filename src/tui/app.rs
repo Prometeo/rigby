@@ -241,7 +241,7 @@ impl App {
                 if self.networks.items.is_empty() {
                     self.networks.items = list_networks(&self.client).await.unwrap_or_default();
                 }
-                self.containers.select_first();
+                self.networks.select_first();
             }
 
             None => {}
@@ -301,16 +301,18 @@ impl App {
     }
 
     pub async fn togle_container_tab(&mut self) {
-        self.container_tab = match self.container_tab {
-            ContainerTab::Details => {
-                self.start_logs_stream();
-                ContainerTab::Logs
-            }
-            ContainerTab::Logs => {
-                self.stop_logs_stream();
-                ContainerTab::Details
-            }
-        };
+        if let Some(MenuItem::Containers) = self.menu.selected() {
+            self.container_tab = match self.container_tab {
+                ContainerTab::Details => {
+                    self.start_logs_stream();
+                    ContainerTab::Logs
+                }
+                ContainerTab::Logs => {
+                    self.stop_logs_stream();
+                    ContainerTab::Details
+                }
+            };
+        }
     }
 
     pub fn quit(&mut self) {

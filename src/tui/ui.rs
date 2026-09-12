@@ -162,6 +162,7 @@ fn render_details(app: &App, area: Rect, frame: &mut Frame) {
         .constraints([Constraint::Length(3), Constraint::Min(0)])
         .split(area);
     render_detail_tabs(app, frame, &rows);
+
     let content_area = rows[1];
 
     let (content, title, scroll_offset): (Text, &str, u16) = match app.container_tab {
