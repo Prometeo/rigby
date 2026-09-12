@@ -22,6 +22,8 @@ use bollard::Docker;
 use color_eyre::Result;
 use ratatui::widgets::ListState;
 use std::fmt;
+use tokio::sync::mpsc::UnboundedReceiver;
+use tokio::task::AbortHandle;
 
 #[derive(PartialEq, Eq)]
 pub enum Focus {
@@ -131,6 +133,8 @@ pub struct App {
     pub details: Option<Details>,
     pub container_tab: ContainerTab,
     pub container_logs: Vec<String>,
+    pub log_rx: Option<UnboundedReceiver<String>>,
+    pub log_abort_handle: Option<AbortHandle>,
 }
 
 impl App {
@@ -138,8 +142,31 @@ impl App {
         Self::default()
     }
 
-    pub async fn tick(&self) -> Result<()> {
+    pub async fn tick(&mut self) -> Result<()> {
+        if let Some(rx) = self.log_rx.as_mut() {
+            while let Ok(line) = rx.try_recv() {
+                self.container_logs.push(line);
+            }
+        }
         Ok(())
+    }
+
+    pub fn start_logs_stream(&mut self) {
+        self.stop_logs_stream();
+        self.container_logs.clear();
+
+        if let Some(container) = self.containers.selected() {
+            let (rx, handle) = get_container_logs(self.client.clone(), container.id.clone(), 100);
+            self.log_rx = Some(rx);
+            self.log_abort_handle = Some(handle);
+        }
+    }
+
+    pub fn stop_logs_stream(&mut self) {
+        if let Some(handle) = self.log_abort_handle.take() {
+            handle.abort();
+        }
+        self.log_rx = None;
     }
 
     pub fn toggle_focus(&mut self) {
@@ -275,20 +302,15 @@ impl App {
 
     pub async fn togle_container_tab(&mut self) {
         self.container_tab = match self.container_tab {
-            ContainerTab::Details => ContainerTab::Logs,
-            ContainerTab::Logs => ContainerTab::Details,
-        };
-
-        match self.container_tab {
-            ContainerTab::Logs => {
-                if let Some(container) = self.containers.selected().cloned() {
-                    self.container_logs = get_container_logs(&self.client, &container.id, 100)
-                        .await
-                        .unwrap_or_default();
-                }
+            ContainerTab::Details => {
+                self.start_logs_stream();
+                ContainerTab::Logs
             }
-            ContainerTab::Details => {}
-        }
+            ContainerTab::Logs => {
+                self.stop_logs_stream();
+                ContainerTab::Details
+            }
+        };
     }
 
     pub fn quit(&mut self) {
@@ -320,6 +342,8 @@ impl Default for App {
             details: None,
             container_tab: ContainerTab::Details,
             container_logs: vec![String::default()],
+            log_rx: None,
+            log_abort_handle: None,
         }
     }
 }

@@ -162,8 +162,9 @@ fn render_details(app: &App, area: Rect, frame: &mut Frame) {
         .constraints([Constraint::Length(3), Constraint::Min(0)])
         .split(area);
     render_detail_tabs(app, frame, &rows);
+    let content_area = rows[1];
 
-    let (content, title): (Text, &str) = match app.container_tab {
+    let (content, title, scroll_offset): (Text, &str, u16) = match app.container_tab {
         ContainerTab::Details => {
             let details = app
                 .details
@@ -171,25 +172,30 @@ fn render_details(app: &App, area: Rect, frame: &mut Frame) {
                 .map(ToString::to_string)
                 .unwrap_or_else(|| "Nothing Selected".into());
 
-            (Text::from(details), "Details")
+            (Text::from(details), "Details", 0)
         }
+
         ContainerTab::Logs => {
             if app.container_logs.is_empty() {
-                (Text::from("No logs available"), "Logs")
+                (Text::from("No logs available"), "Logs", 0)
             } else {
                 let lines: Vec<Line> = app
                     .container_logs
                     .iter()
                     .map(|log| Line::raw(log.clone()))
                     .collect();
-
-                (Text::from(lines), "Logs")
+                let total_lines: u16 = lines.len() as u16;
+                let visible_height = content_area.height.saturating_sub(2);
+                let offset = total_lines.saturating_sub(visible_height);
+                (Text::from(lines), "Logs", offset)
             }
         }
     };
 
-    let paragraph = Paragraph::new(content).block(Block::bordered().title(title));
-    frame.render_widget(paragraph, rows[1]);
+    let paragraph = Paragraph::new(content)
+        .block(Block::bordered().title(title))
+        .scroll((scroll_offset, 0));
+    frame.render_widget(paragraph, content_area);
 }
 
 fn render_container_item(container: &DockerContainer) -> ListItem<'static> {

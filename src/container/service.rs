@@ -6,6 +6,8 @@ use bollard::{
 };
 use color_eyre::Result;
 use futures_util::StreamExt;
+use tokio::sync::mpsc::{self, UnboundedReceiver};
+use tokio::task::AbortHandle;
 
 pub async fn list_containers(client: &Docker) -> Result<Vec<DockerContainer>> {
     let options = ListContainersOptionsBuilder::default().all(true).build();
@@ -26,39 +28,45 @@ pub async fn inspect_container(
     Ok(DockerContainerDetail::new(&container_info, container))
 }
 
-pub async fn get_container_logs(
-    client: &Docker,
-    container_id_or_name: &str,
+pub fn get_container_logs(
+    client: Docker,
+    container_id: String,
     tail: usize,
-) -> Result<Vec<String>> {
-    let options = LogsOptions {
-        stdout: true,
-        stderr: true,
-        tail: tail.to_string(),
-        timestamps: false,
-        ..Default::default()
-    };
+) -> (UnboundedReceiver<String>, AbortHandle) {
+    let (tx, rx) = mpsc::unbounded_channel();
 
-    let mut stream = client.logs(container_id_or_name, Some(options));
-    let mut logs = Vec::new();
+    let task = tokio::spawn(async move {
+        let options = LogsOptions {
+            stdout: true,
+            stderr: true,
+            follow: true,
+            tail: tail.to_string(),
+            timestamps: false,
+            ..Default::default()
+        };
 
-    while let Some(output) = stream.next().await {
-        match output? {
-            LogOutput::StdOut { message } | LogOutput::Console { message } => {
-                let text = String::from_utf8_lossy(&message);
-                for line in text.lines() {
-                    logs.push(line.to_string());
+        let mut stream = client.logs(&container_id, Some(options));
+
+        while let Some(chunk) = stream.next().await {
+            let Ok(output) = chunk else { break };
+
+            let text = match output {
+                LogOutput::StdOut { message } | LogOutput::Console { message } => {
+                    String::from_utf8_lossy(&message).to_string()
+                }
+                LogOutput::StdErr { message } => {
+                    format!("[ERR] {}", String::from_utf8_lossy(&message))
+                }
+                _ => continue,
+            };
+
+            for line in text.lines() {
+                if tx.send(line.to_string()).is_err() {
+                    return;
                 }
             }
-            LogOutput::StdErr { message } => {
-                let text = String::from_utf8_lossy(&message);
-                for line in text.lines() {
-                    logs.push(format!("[ERR] {line}"));
-                }
-            }
-            _ => {}
         }
-    }
+    });
 
-    Ok(logs)
+    (rx, task.abort_handle())
 }
