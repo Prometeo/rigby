@@ -22,6 +22,7 @@ use bollard::Docker;
 use color_eyre::Result;
 use ratatui::widgets::ListState;
 use std::fmt;
+use std::time::Duration;
 use std::time::Instant;
 use tokio::sync::mpsc::UnboundedReceiver;
 use tokio::task::AbortHandle;
@@ -150,6 +151,15 @@ impl App {
                 self.container_logs.push(line);
             }
         }
+
+        if self.last_refresh.elapsed() >= Duration::from_secs(1) {
+            self.containers.items = list_containers(&self.client).await.unwrap_or_default();
+            self.images.items = list_images(&self.client).await.unwrap_or_default();
+            self.volumes.items = list_volumes(&self.client).await.unwrap_or_default();
+            self.networks.items = list_networks(&self.client).await.unwrap_or_default();
+            self.last_refresh = Instant::now();
+        }
+
         Ok(())
     }
 
