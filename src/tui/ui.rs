@@ -54,6 +54,7 @@ pub fn render(app: &mut App, frame: &mut Frame) {
                 app.focus == Focus::ItemsList,
                 |item| ListItem::new(item.to_string()),
             );
+            app.container_tab = ContainerTab::Details;
         }
         Some(MenuItem::Networks) => {
             render_list(
@@ -65,6 +66,7 @@ pub fn render(app: &mut App, frame: &mut Frame) {
                 app.focus == Focus::ItemsList,
                 |item| ListItem::new(item.to_string()),
             );
+            app.container_tab = ContainerTab::Details;
         }
         Some(MenuItem::Volumes) => {
             render_list(
@@ -76,6 +78,7 @@ pub fn render(app: &mut App, frame: &mut Frame) {
                 app.focus == Focus::ItemsList,
                 |item| ListItem::new(item.to_string()),
             );
+            app.container_tab = ContainerTab::Details;
         }
         None => {}
     }
