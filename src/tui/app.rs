@@ -23,8 +23,7 @@ use color_eyre::Result;
 use ratatui::widgets::ListState;
 use std::fmt;
 use std::time::Duration;
-use tokio::sync::mpsc::UnboundedReceiver;
-use tokio::sync::mpsc::unbounded_channel;
+use tokio::sync::mpsc::{UnboundedReceiver, unbounded_channel};
 use tokio::task::AbortHandle;
 
 #[derive(PartialEq, Eq)]
@@ -397,6 +396,38 @@ impl App {
     pub fn quit(&mut self) {
         self.quit = true;
     }
+
+    pub fn spawn_docker_poller(client: Docker) -> UnboundedReceiver<DockerPollData> {
+        let (tx, rx) = unbounded_channel();
+
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(Duration::from_secs(1));
+            loop {
+                interval.tick().await;
+
+                // Fetch in parallel or sequentially in background without touching UI thread
+                let (containers, images, volumes, networks) = tokio::join!(
+                    list_containers(&client),
+                    list_images(&client),
+                    list_volumes(&client),
+                    list_networks(&client),
+                );
+
+                let data = DockerPollData {
+                    containers: containers.unwrap_or_default(),
+                    images: images.unwrap_or_default(),
+                    volumes: volumes.unwrap_or_default(),
+                    networks: networks.unwrap_or_default(),
+                };
+
+                if tx.send(data).is_err() {
+                    break;
+                }
+            }
+        });
+
+        rx
+    }
 }
 
 impl Default for App {
@@ -431,36 +462,4 @@ impl Default for App {
             poll_rx: None,
         }
     }
-}
-
-pub fn spawn_docker_poller(client: Docker) -> UnboundedReceiver<DockerPollData> {
-    let (tx, rx) = unbounded_channel();
-
-    tokio::spawn(async move {
-        let mut interval = tokio::time::interval(Duration::from_secs(1));
-        loop {
-            interval.tick().await;
-
-            // Fetch in parallel or sequentially in background without touching UI thread
-            let (containers, images, volumes, networks) = tokio::join!(
-                list_containers(&client),
-                list_images(&client),
-                list_volumes(&client),
-                list_networks(&client),
-            );
-
-            let data = DockerPollData {
-                containers: containers.unwrap_or_default(),
-                images: images.unwrap_or_default(),
-                volumes: volumes.unwrap_or_default(),
-                networks: networks.unwrap_or_default(),
-            };
-
-            if tx.send(data).is_err() {
-                break;
-            }
-        }
-    });
-
-    rx
 }

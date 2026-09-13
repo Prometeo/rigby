@@ -4,10 +4,7 @@ mod networking;
 mod tui;
 mod utils;
 mod volume;
-use crate::tui::{
-    Tui,
-    app::{App, spawn_docker_poller},
-};
+use crate::tui::{Tui, app::App};
 use color_eyre::Result;
 use ratatui::{Terminal, backend::CrosstermBackend};
 use std::io::{BufWriter, stderr};
@@ -17,7 +14,7 @@ use tui::update::update;
 #[tokio::main]
 async fn main() -> Result<()> {
     let mut app: App = App::new();
-    app.poll_rx = Some(spawn_docker_poller(app.client.clone()));
+    app.poll_rx = Some(App::spawn_docker_poller(app.client.clone()));
     app.menu_data_loaded().await;
 
     let backend = CrosstermBackend::new(BufWriter::new(stderr()));
