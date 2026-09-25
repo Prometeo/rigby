@@ -49,7 +49,7 @@ pub async fn update(app: &mut App, key_event: KeyEvent) -> Result<(), Report> {
         },
 
         KeyCode::Left | KeyCode::Right => {
-            app.togle_container_tab().await;
+            app.toggle_container_tab().await;
         }
 
         KeyCode::Tab => {

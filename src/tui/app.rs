@@ -378,8 +378,10 @@ impl App {
         };
     }
 
-    pub async fn togle_container_tab(&mut self) {
-        if let Some(MenuItem::Containers) = self.menu.selected() {
+    pub async fn toggle_container_tab(&mut self) {
+        if let Some(MenuItem::Containers) = self.menu.selected()
+            && (self.focus == Focus::Content)
+        {
             self.container_tab = match self.container_tab {
                 ContainerTab::Details => {
                     self.start_logs_stream();
