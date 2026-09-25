@@ -123,7 +123,7 @@ pub struct DockerPollData {
     pub networks: Vec<DockerNetwork>,
 }
 
-#[derive(Default, PartialEq, Eq)]
+#[derive(Default, PartialEq, Eq, Clone)]
 pub enum ContainerTab {
     #[default]
     Details,
@@ -144,9 +144,11 @@ pub struct App {
     pub container_logs: Vec<String>,
     pub log_rx: Option<UnboundedReceiver<String>>,
     pub log_abort_handle: Option<AbortHandle>,
-    pub log_scroll: u16,
+    pub log_vertical_scroll: u16,
+    pub log_horizontal_scroll: u16,
     pub log_auto_scroll: bool,
     pub log_visible_height: u16,
+    pub log_visible_width: u16,
     pub poll_rx: Option<UnboundedReceiver<DockerPollData>>,
 }
 
@@ -166,7 +168,7 @@ impl App {
             if self.container_logs.len() > MAX_LOG_LINES {
                 let excess = self.container_logs.len() - MAX_LOG_LINES;
                 self.container_logs.drain(0..excess);
-                self.log_scroll = self.log_scroll.saturating_sub(excess as u16);
+                self.log_vertical_scroll = self.log_vertical_scroll.saturating_sub(excess as u16);
             }
         }
 
@@ -189,9 +191,9 @@ impl App {
 
         if self.log_auto_scroll {
             self.log_auto_scroll = false;
-            self.log_scroll = max_scroll.saturating_sub(1);
+            self.log_vertical_scroll = max_scroll.saturating_sub(1);
         } else {
-            self.log_scroll = self.log_scroll.saturating_sub(1);
+            self.log_vertical_scroll = self.log_vertical_scroll.saturating_sub(1);
         }
     }
 
@@ -199,27 +201,56 @@ impl App {
         let total_lines = self.container_logs.len() as u16;
         let max_scroll = total_lines.saturating_sub(self.log_visible_height);
 
-        self.log_scroll = self.log_scroll.saturating_add(1);
+        self.log_vertical_scroll = self.log_vertical_scroll.saturating_add(1);
 
-        if self.log_scroll >= max_scroll {
+        if self.log_vertical_scroll >= max_scroll {
             self.log_auto_scroll = true;
         }
     }
 
-    pub fn logs_scroll_to_top(&mut self) {
+    pub fn vertical_logs_scroll_to_top(&mut self) {
         self.log_auto_scroll = false;
-        self.log_scroll = 0;
+        self.log_vertical_scroll = 0;
     }
 
-    pub fn logs_scroll_to_bottom(&mut self) {
+    pub fn vertical_logs_scroll_bottom(&mut self) {
         self.log_auto_scroll = true;
         let total_lines = self.container_logs.len() as u16;
-        self.log_scroll = total_lines.saturating_sub(self.log_visible_height);
+        self.log_vertical_scroll = total_lines.saturating_sub(self.log_visible_height);
+    }
+
+    fn max_horizontal_scroll(&self) -> u16 {
+        let max_line_width = self
+            .container_logs
+            .iter()
+            .map(|l| l.chars().count())
+            .max()
+            .unwrap_or(0) as u16;
+
+        max_line_width.saturating_sub(self.log_visible_width)
+    }
+
+    pub fn horizontal_logs_scroll_left(&mut self) {
+        self.log_horizontal_scroll = self.log_horizontal_scroll.saturating_sub(4);
+    }
+
+    pub fn horizontal_logs_scroll_right(&mut self) {
+        let max_scroll = self.max_horizontal_scroll();
+        self.log_horizontal_scroll = (self.log_horizontal_scroll + 4).min(max_scroll);
+    }
+
+    pub fn horizontal_logs_scroll_to_start(&mut self) {
+        self.log_horizontal_scroll = 0;
+    }
+
+    pub fn horizontal_logs_scroll_to_end(&mut self) {
+        self.log_horizontal_scroll = self.max_horizontal_scroll();
     }
 
     pub fn start_logs_stream(&mut self) {
         self.stop_logs_stream();
         self.container_logs.clear();
+        self.log_horizontal_scroll = 0;
 
         if let Some(container) = self.containers.selected() {
             let (rx, handle) = get_container_logs(self.client.clone(), container.id.clone(), 100);
@@ -378,19 +409,28 @@ impl App {
         };
     }
 
-    pub async fn toggle_container_tab(&mut self) {
+    pub async fn toggle_container_tab(&mut self, tab: char) {
         if let Some(MenuItem::Containers) = self.menu.selected()
             && (self.focus == Focus::Content)
         {
-            self.container_tab = match self.container_tab {
-                ContainerTab::Details => {
-                    self.start_logs_stream();
-                    ContainerTab::Logs
+            self.container_tab = match tab {
+                'd' => {
+                    if self.container_tab != ContainerTab::Details {
+                        self.stop_logs_stream();
+                        ContainerTab::Details
+                    } else {
+                        return;
+                    }
                 }
-                ContainerTab::Logs => {
-                    self.stop_logs_stream();
-                    ContainerTab::Details
+                'l' => {
+                    if self.container_tab != ContainerTab::Logs {
+                        self.start_logs_stream();
+                        ContainerTab::Logs
+                    } else {
+                        return;
+                    }
                 }
+                _ => return,
             };
         }
     }
@@ -458,9 +498,11 @@ impl Default for App {
             container_logs: vec![String::default()],
             log_rx: None,
             log_abort_handle: None,
-            log_scroll: 0,
+            log_vertical_scroll: 0,
+            log_horizontal_scroll: 0,
             log_auto_scroll: true,
             log_visible_height: 20,
+            log_visible_width: 5,
             poll_rx: None,
         }
     }

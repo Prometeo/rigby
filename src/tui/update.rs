@@ -16,7 +16,7 @@ pub async fn update(app: &mut App, key_event: KeyEvent) -> Result<(), Report> {
             app.select_menu_item(c).await;
         }
 
-        KeyCode::Up | KeyCode::Char('k') => match app.focus {
+        KeyCode::Up => match app.focus {
             Focus::ItemsList => {
                 app.move_items_list_up().await;
             }
@@ -25,7 +25,7 @@ pub async fn update(app: &mut App, key_event: KeyEvent) -> Result<(), Report> {
             }
         },
 
-        KeyCode::Down | KeyCode::Char('j') => match app.focus {
+        KeyCode::Down => match app.focus {
             Focus::ItemsList => {
                 app.move_items_list_down().await;
             }
@@ -36,20 +36,36 @@ pub async fn update(app: &mut App, key_event: KeyEvent) -> Result<(), Report> {
 
         KeyCode::Char('g') => match app.focus {
             Focus::Content => {
-                app.logs_scroll_to_top();
+                app.vertical_logs_scroll_to_top();
             }
             Focus::ItemsList => {}
         },
 
         KeyCode::Char('G') => match app.focus {
             Focus::Content => {
-                app.logs_scroll_to_bottom();
+                app.vertical_logs_scroll_bottom();
             }
             Focus::ItemsList => {}
         },
 
-        KeyCode::Left | KeyCode::Right => {
-            app.toggle_container_tab().await;
+        KeyCode::Left if key_event.modifiers == KeyModifiers::CONTROL => {
+            app.horizontal_logs_scroll_to_start();
+        }
+
+        KeyCode::Left => {
+            app.horizontal_logs_scroll_left();
+        }
+
+        KeyCode::Right if key_event.modifiers == KeyModifiers::CONTROL => {
+            app.horizontal_logs_scroll_to_end();
+        }
+
+        KeyCode::Right => {
+            app.horizontal_logs_scroll_right();
+        }
+
+        KeyCode::Char(c @ ('d' | 'l')) => {
+            app.toggle_container_tab(c).await;
         }
 
         KeyCode::Tab => {

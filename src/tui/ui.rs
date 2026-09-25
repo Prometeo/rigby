@@ -253,22 +253,33 @@ where
     }
 
     let visible_height = area.height.saturating_sub(2);
+    let visible_width = area.width.saturating_sub(2);
     app.log_visible_height = visible_height;
+    app.log_visible_width = visible_width;
 
+    // Calculate Vertical Bounds
     let total_lines = app.container_logs.len();
-    let v_height = visible_height as usize;
-    let max_scroll = total_lines.saturating_sub(v_height);
+    let max_vertical_scroll = total_lines.saturating_sub(visible_height as usize);
 
-    let current_scroll = if app.log_auto_scroll {
-        max_scroll
+    let vertical_scroll = if app.log_auto_scroll {
+        max_vertical_scroll as u16
     } else {
-        (app.log_scroll as usize).min(max_scroll)
+        app.log_vertical_scroll.min(max_vertical_scroll as u16)
     };
 
-    let start = current_scroll;
-    let end = (start + v_height).min(total_lines);
+    // Calculate Horizontal Bounds
+    let max_line_width = app
+        .container_logs
+        .iter()
+        .map(|l| l.len())
+        .max()
+        .unwrap_or(0);
+    let max_horizontal_scroll = max_line_width.saturating_sub(visible_width as usize) as u16;
+    let horizontal_scroll = app.log_horizontal_scroll.min(max_horizontal_scroll);
 
-    let visible_lines: Vec<Line> = app.container_logs[start..end]
+    // Prepare All Styled Lines
+    let lines: Vec<Line> = app
+        .container_logs
         .iter()
         .map(|log| {
             if log.starts_with("[ERR]") {
@@ -280,23 +291,41 @@ where
         .collect();
 
     let title = if app.log_auto_scroll {
-        " Logs [FOLLOWING - Press 'k'/Up to pause] "
+        " Logs [FOLLOWING - Press Up to pause] "
     } else {
         " Logs [PAUSED - Press 'G' to resume follow] "
     };
 
-    let paragraph = Paragraph::new(Text::from(visible_lines)).block(make_block(title));
+    // Render Paragraph with 2D Scroll
+    let paragraph = Paragraph::new(Text::from(lines))
+        .block(make_block(title))
+        .scroll((vertical_scroll, horizontal_scroll));
 
     frame.render_widget(paragraph, area);
 
-    let mut scrollbar_state = ScrollbarState::new(max_scroll).position(current_scroll);
-
+    // Vertical Scrollbar (Right)
+    let mut v_scrollbar_state =
+        ScrollbarState::new(max_vertical_scroll).position(vertical_scroll as usize);
     frame.render_stateful_widget(
         Scrollbar::default()
             .orientation(ScrollbarOrientation::VerticalRight)
             .begin_symbol(Some("↑"))
             .end_symbol(Some("↓")),
         area,
-        &mut scrollbar_state,
+        &mut v_scrollbar_state,
     );
+
+    // Horizontal Scrollbar (Bottom)
+    if max_horizontal_scroll > 0 {
+        let mut h_scrollbar_state = ScrollbarState::new(max_horizontal_scroll as usize)
+            .position(horizontal_scroll as usize);
+        frame.render_stateful_widget(
+            Scrollbar::default()
+                .orientation(ScrollbarOrientation::HorizontalBottom)
+                .begin_symbol(Some("←"))
+                .end_symbol(Some("→")),
+            area,
+            &mut h_scrollbar_state,
+        );
+    }
 }
