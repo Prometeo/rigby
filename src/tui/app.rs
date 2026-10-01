@@ -129,7 +129,6 @@ pub enum ContainerTab {
     #[default]
     Details,
     Logs,
-    Stats,
 }
 
 pub struct App {
@@ -152,10 +151,6 @@ pub struct App {
     pub log_visible_height: u16,
     pub log_visible_width: u16,
     pub poll_rx: Option<UnboundedReceiver<DockerPollData>>,
-    pub current_cpu: f64,
-    pub cpu_history: VecDeque<u64>,
-    pub stats_rx: Option<UnboundedReceiver<f64>>,
-    pub stats_abort_handle: Option<AbortHandle>,
 }
 
 impl App {
@@ -184,16 +179,6 @@ impl App {
                 self.images.items = data.images;
                 self.volumes.items = data.volumes;
                 self.networks.items = data.networks;
-            }
-        }
-
-        if let Some(rx) = self.stats_rx.as_mut() {
-            while let Ok(cpu) = rx.try_recv() {
-                self.current_cpu = cpu;
-                if self.cpu_history.len() >= 60 {
-                    self.cpu_history.pop_front();
-                }
-                self.cpu_history.push_back(cpu.round() as u64);
             }
         }
 
@@ -243,28 +228,6 @@ impl App {
             .unwrap_or(0) as u16;
 
         max_line_width.saturating_sub(self.log_visible_width)
-    }
-
-    pub fn start_stats_stream(&mut self) {
-        self.stop_stats_stream();
-        self.cpu_history.clear();
-        self.current_cpu = 0.0;
-
-        if let Some(container) = self.containers.selected() {
-            let (rx, handle) = crate::container::service::get_container_cpu_stream(
-                self.client.clone(),
-                container.id.clone(),
-            );
-            self.stats_rx = Some(rx);
-            self.stats_abort_handle = Some(handle);
-        }
-    }
-
-    pub fn stop_stats_stream(&mut self) {
-        if let Some(handle) = self.stats_abort_handle.take() {
-            handle.abort();
-        }
-        self.stats_rx = None;
     }
 
     pub fn horizontal_logs_scroll_left(&mut self) {
@@ -322,7 +285,6 @@ impl App {
                 match self.container_tab {
                     ContainerTab::Logs => self.start_logs_stream(),
                     ContainerTab::Details => self.load_selected_details().await,
-                    ContainerTab::Stats => self.start_stats_stream(),
                 }
             }
             Some(MenuItem::Networks) => self.networks.move_up(),
@@ -339,7 +301,6 @@ impl App {
                 match self.container_tab {
                     ContainerTab::Logs => self.start_logs_stream(),
                     ContainerTab::Details => self.load_selected_details().await,
-                    ContainerTab::Stats => self.start_stats_stream(),
                 }
             }
             Some(MenuItem::Networks) => self.networks.move_down(),
@@ -363,7 +324,6 @@ impl App {
         match self.menu.selected() {
             Some(MenuItem::Images) => {
                 self.stop_logs_stream();
-                self.stop_stats_stream();
                 if self.images.items.is_empty() {
                     self.images.items = list_images(&self.client).await.unwrap_or_default();
                 }
@@ -373,7 +333,6 @@ impl App {
 
             Some(MenuItem::Containers) => {
                 self.stop_logs_stream();
-                self.stop_stats_stream();
                 if self.containers.items.is_empty() {
                     self.containers.items = list_containers(&self.client).await.unwrap_or_default();
                 }
@@ -384,7 +343,6 @@ impl App {
 
             Some(MenuItem::Volumes) => {
                 self.stop_logs_stream();
-                self.stop_stats_stream();
                 if self.volumes.items.is_empty() {
                     self.volumes.items = list_volumes(&self.client).await.unwrap_or_default();
                 }
@@ -394,7 +352,6 @@ impl App {
 
             Some(MenuItem::Networks) => {
                 self.stop_logs_stream();
-                self.stop_stats_stream();
                 if self.networks.items.is_empty() {
                     self.networks.items = list_networks(&self.client).await.unwrap_or_default();
                 }
@@ -464,7 +421,6 @@ impl App {
                 'd' => {
                     if self.container_tab != ContainerTab::Details {
                         self.stop_logs_stream();
-                        self.stop_stats_stream();
                         ContainerTab::Details
                     } else {
                         return;
@@ -473,17 +429,7 @@ impl App {
                 'l' => {
                     if self.container_tab != ContainerTab::Logs {
                         self.start_logs_stream();
-                        self.stop_stats_stream();
                         ContainerTab::Logs
-                    } else {
-                        return;
-                    }
-                }
-                's' => {
-                    if self.container_tab != ContainerTab::Stats {
-                        self.stop_stats_stream();
-                        self.stop_logs_stream();
-                        ContainerTab::Stats
                     } else {
                         return;
                     }
@@ -562,10 +508,6 @@ impl Default for App {
             log_visible_height: 20,
             log_visible_width: 5,
             poll_rx: None,
-            current_cpu: 0.0,
-            cpu_history: VecDeque::with_capacity(60),
-            stats_rx: None,
-            stats_abort_handle: None,
         }
     }
 }

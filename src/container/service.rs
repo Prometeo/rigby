@@ -1,6 +1,4 @@
 use crate::container::models::{DockerContainer, DockerContainerDetail};
-use bollard::query_parameters::StatsOptions;
-use bollard::service::ContainerStatsResponse;
 use bollard::{
     Docker,
     container::LogOutput,
@@ -66,89 +64,6 @@ pub fn get_container_logs(
                 if tx.send(line.to_string()).is_err() {
                     return;
                 }
-            }
-        }
-    });
-
-    (rx, task.abort_handle())
-}
-pub fn get_container_cpu_stream(
-    client: Docker,
-    container_id: String,
-) -> (UnboundedReceiver<f64>, AbortHandle) {
-    let (tx, rx) = unbounded_channel();
-
-    let task = tokio::spawn(async move {
-        let options = StatsOptions {
-            stream: true,
-            one_shot: false,
-        };
-
-        let mut stream = client.stats(&container_id, Some(options));
-
-        let mut last_cpu_total: u64 = 0;
-        let mut last_system_total: u64 = 0;
-
-        while let Some(item) = stream.next().await {
-            let stats: ContainerStatsResponse = match item {
-                Ok(s) => s,
-                Err(e) => {
-                    eprintln!("Bollard stats error for {container_id}: {e:?}");
-                    break;
-                }
-            };
-
-            let cpu = match stats.cpu_stats {
-                Some(ref c) => c,
-                None => continue,
-            };
-
-            let cur_cpu = cpu
-                .cpu_usage
-                .as_ref()
-                .and_then(|u| u.total_usage)
-                .unwrap_or(0);
-
-            let cur_system = cpu.system_cpu_usage.unwrap_or(0);
-
-            let pre_cpu = stats
-                .precpu_stats
-                .as_ref()
-                .and_then(|p| p.cpu_usage.as_ref())
-                .and_then(|u| u.total_usage)
-                .unwrap_or(last_cpu_total);
-
-            let pre_system = stats
-                .precpu_stats
-                .as_ref()
-                .and_then(|p| p.system_cpu_usage)
-                .unwrap_or(last_system_total);
-
-            let cpu_delta = cur_cpu.saturating_sub(pre_cpu) as f64;
-            let system_delta = cur_system.saturating_sub(pre_system) as f64;
-
-            last_cpu_total = cur_cpu;
-            last_system_total = cur_system;
-
-            let online_cpus = cpu
-                .online_cpus
-                .map(|c| c as f64)
-                .or_else(|| {
-                    cpu.cpu_usage
-                        .as_ref()
-                        .and_then(|u| u.percpu_usage.as_ref())
-                        .map(|p| p.len() as f64)
-                })
-                .unwrap_or(1.0);
-
-            let cpu_percent = if system_delta > 0.0 {
-                (cpu_delta / system_delta) * online_cpus * 100.0
-            } else {
-                0.0
-            };
-
-            if tx.send(cpu_percent).is_err() {
-                break;
             }
         }
     });

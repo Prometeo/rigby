@@ -198,7 +198,6 @@ fn render_content(app: &mut App, area: Rect, frame: &mut Frame, focused: bool) {
         }
 
         ContainerTab::Logs => render_logs(app, make_block, frame, content_area),
-        ContainerTab::Stats => render_container_stats(app, make_block, frame, content_area),
     }
 }
 
@@ -223,13 +222,11 @@ fn render_detail_tabs(app: &App, frame: &mut Frame, rows: &Rc<[Rect]>) {
     let mut tab_titles = vec![Line::from(" Details ")];
     if matches!(app.menu.selected(), Some(MenuItem::Containers)) {
         tab_titles.push(Line::from(" Logs "));
-        tab_titles.push(Line::from(" Stats "));
     };
 
     let selected_tab = match app.container_tab {
         ContainerTab::Details => 0,
         ContainerTab::Logs => 1,
-        ContainerTab::Stats => 2,
     };
 
     let tabs = Tabs::new(tab_titles)
@@ -331,56 +328,4 @@ where
             &mut h_scrollbar_state,
         );
     }
-}
-
-fn render_container_stats<F>(app: &App, make_block: F, frame: &mut Frame, area: Rect)
-where
-    F: Fn(&str) -> Block<'static>,
-{
-    let chunks = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([Constraint::Length(3), Constraint::Min(6)])
-        .split(area);
-
-    let is_running = app
-        .containers
-        .selected()
-        .map(|c| c.state.as_str() == "running")
-        .unwrap_or(false);
-
-    let gauge_title = if is_running {
-        " CPU Usage "
-    } else {
-        " CPU Usage [Container Not Running] "
-    };
-
-    let gauge_val = app.current_cpu.clamp(0.0, 100.0) as u16;
-    let gauge = Gauge::default()
-        .block(make_block(gauge_title))
-        .gauge_style(
-            Style::default()
-                .fg(if is_running {
-                    Color::Cyan
-                } else {
-                    Color::DarkGray
-                })
-                .bg(Color::DarkGray)
-                .add_modifier(Modifier::BOLD),
-        )
-        .percent(gauge_val)
-        .label(format!("{:.2}%", app.current_cpu));
-    frame.render_widget(gauge, chunks[0]);
-
-    let data: Vec<u64> = if app.cpu_history.is_empty() {
-        vec![0]
-    } else {
-        app.cpu_history.iter().copied().collect()
-    };
-
-    let sparkline = Sparkline::default()
-        .block(make_block(" CPU History (Last 60s) "))
-        .data(&data)
-        .max(100)
-        .style(Style::default().fg(Color::Yellow));
-    frame.render_widget(sparkline, chunks[1]);
 }
