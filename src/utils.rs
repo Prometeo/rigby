@@ -1,6 +1,7 @@
 use bollard::Docker;
 use chrono::{DateTime, Local, Utc};
 use color_eyre::{Report, Result, eyre::eyre};
+
 pub fn driver_connector() -> Result<Docker> {
     Ok(Docker::connect_with_local_defaults()?)
 }
