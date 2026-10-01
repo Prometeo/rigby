@@ -64,9 +64,11 @@ pub async fn update(app: &mut App, key_event: KeyEvent) -> Result<(), Report> {
             app.horizontal_logs_scroll_right();
         }
 
-        KeyCode::Char(c @ ('d' | 'l' | 's')) => {
+        KeyCode::Char(c @ ('d' | 'l')) => {
             app.toggle_container_tab(c).await;
         }
+
+        KeyCode::Char('s') => app.stop_container().await,
 
         KeyCode::Tab => {
             app.toggle_focus();

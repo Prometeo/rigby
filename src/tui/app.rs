@@ -14,14 +14,13 @@ use crate::volume::{
 use crate::{
     container::{
         models::{DockerContainer, DockerContainerDetail},
-        service::{get_container_logs, inspect_container, list_containers},
+        service::{get_container_logs, inspect_container, list_containers, stop_container},
     },
     volume::service::inspect_volume,
 };
 use bollard::Docker;
 use color_eyre::Result;
 use ratatui::widgets::ListState;
-use std::collections::VecDeque;
 use std::fmt;
 use std::time::Duration;
 use tokio::sync::mpsc::{UnboundedReceiver, unbounded_channel};
@@ -275,6 +274,12 @@ impl App {
 
     pub async fn menu_data_loaded(&mut self) {
         self.load_selected().await
+    }
+
+    pub async fn stop_container(&mut self) {
+        if let Some(container) = self.containers.selected() {
+            stop_container(&self.client, &container.id).await;
+        }
     }
 
     pub async fn move_items_list_up(&mut self) {

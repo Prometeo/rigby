@@ -2,7 +2,7 @@ use crate::container::models::{DockerContainer, DockerContainerDetail};
 use bollard::{
     Docker,
     container::LogOutput,
-    query_parameters::{ListContainersOptionsBuilder, LogsOptions},
+    query_parameters::{ListContainersOptionsBuilder, LogsOptions, StopContainerOptionsBuilder},
 };
 use color_eyre::Result;
 use futures_util::StreamExt;
@@ -69,4 +69,12 @@ pub fn get_container_logs(
     });
 
     (rx, task.abort_handle())
+}
+
+pub async fn stop_container(client: &Docker, container_id: &str) {
+    let options = StopContainerOptionsBuilder::default().t(0).build();
+    match client.stop_container(container_id, Some(options)).await {
+        Ok(_) => {}
+        Err(_) => {}
+    }
 }
