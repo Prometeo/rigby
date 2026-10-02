@@ -52,26 +52,31 @@ pub fn get_container_logs(
 
         while let Some(chunk) = stream.next().await {
             let Ok(output) = chunk else { break };
-
-            let text = match output {
-                LogOutput::StdOut { message } | LogOutput::Console { message } => {
-                    String::from_utf8_lossy(&message).to_string()
-                }
-                LogOutput::StdErr { message } => {
-                    format!("[ERR] {}", String::from_utf8_lossy(&message))
-                }
-                _ => continue,
-            };
-
-            for line in text.lines() {
-                if tx.send(line.to_string()).is_err() {
-                    return;
+            if let Some(lines) = format_log_chunk(output) {
+                for line in lines {
+                    if tx.send(line).is_err() {
+                        return;
+                    }
                 }
             }
         }
     });
 
     (rx, task.abort_handle())
+}
+
+pub fn format_log_chunk(output: LogOutput) -> Option<Vec<String>> {
+    let text = match output {
+        LogOutput::StdOut { message } | LogOutput::Console { message } => {
+            String::from_utf8_lossy(&message).to_string()
+        }
+        LogOutput::StdErr { message } => {
+            format!("[ERR] {}", String::from_utf8_lossy(&message))
+        }
+        _ => return None,
+    };
+
+    Some(text.lines().map(ToString::to_string).collect())
 }
 
 pub async fn stop_container(client: &Docker, container_id: &str) {
