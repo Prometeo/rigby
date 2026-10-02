@@ -14,7 +14,9 @@ use crate::volume::{
 use crate::{
     container::{
         models::{DockerContainer, DockerContainerDetail},
-        service::{get_container_logs, inspect_container, list_containers, stop_container},
+        service::{
+            get_container_logs, inspect_container, list_containers, start_container, stop_container,
+        },
     },
     volume::service::inspect_volume,
 };
@@ -276,11 +278,15 @@ impl App {
         self.load_selected().await
     }
 
-    pub async fn footer_action(&mut self) {
+    pub async fn footer_action(&mut self, action: char) {
         match self.menu.selected() {
             Some(MenuItem::Containers) => {
                 if let Some(container) = self.containers.selected() {
-                    stop_container(&self.client, &container.id).await;
+                    match action {
+                        's' => stop_container(&self.client, &container.id).await,
+                        'a' => start_container(&self.client, &container.id).await,
+                        _ => {}
+                    }
                 }
             }
             _ => {}
