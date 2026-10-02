@@ -68,7 +68,7 @@ pub async fn update(app: &mut App, key_event: KeyEvent) -> Result<(), Report> {
             app.toggle_container_tab(c).await;
         }
 
-        KeyCode::Char('s') => app.stop_container().await,
+        KeyCode::Char('s') => app.footer_action().await,
 
         KeyCode::Tab => {
             app.toggle_focus();

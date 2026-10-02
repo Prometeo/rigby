@@ -8,8 +8,8 @@ use ratatui::{
     style::{Color, Modifier, Style, Stylize},
     text::{Line, Span, Text},
     widgets::{
-        Block, BorderType, Borders, Gauge, List, ListItem, ListState, Paragraph, Scrollbar,
-        ScrollbarOrientation, ScrollbarState, Sparkline, Tabs,
+        Block, BorderType, Borders, List, ListItem, ListState, Paragraph, Scrollbar,
+        ScrollbarOrientation, ScrollbarState, Tabs,
     },
 };
 use std::rc::Rc;
@@ -42,6 +42,7 @@ pub fn render(app: &mut App, frame: &mut Frame) {
                 "Containers",
                 app.focus == Focus::ItemsList,
                 render_container_item,
+                get_list_footer('c'),
             );
         }
         Some(MenuItem::Images) => {
@@ -53,6 +54,7 @@ pub fn render(app: &mut App, frame: &mut Frame) {
                 "Images",
                 app.focus == Focus::ItemsList,
                 |item| ListItem::new(item.to_string()),
+                get_list_footer('i'),
             );
             app.container_tab = ContainerTab::Details;
         }
@@ -65,6 +67,7 @@ pub fn render(app: &mut App, frame: &mut Frame) {
                 "Networks",
                 app.focus == Focus::ItemsList,
                 |item| ListItem::new(item.to_string()),
+                get_list_footer('n'),
             );
             app.container_tab = ContainerTab::Details;
         }
@@ -77,6 +80,7 @@ pub fn render(app: &mut App, frame: &mut Frame) {
                 "Volumes",
                 app.focus == Focus::ItemsList,
                 |item| ListItem::new(item.to_string()),
+                get_list_footer('v'),
             );
             app.container_tab = ContainerTab::Details;
         }
@@ -111,7 +115,6 @@ fn render_menu_tabs(app: &App, area: Rect, frame: &mut Frame) {
         .title("Menu")
         .border_type(BorderType::Thick)
         .border_style(Style::default().fg(Color::Green));
-
     let tabs = Tabs::new(titles)
         .block(block)
         .select(selected_index)
@@ -133,14 +136,15 @@ fn render_list<T, F>(
     title: &str,
     focused: bool,
     item_renderer: F,
+    footer: Line,
 ) where
     F: Fn(&T) -> ListItem<'static>,
 {
     let items = items.iter().map(item_renderer);
-
     let block = if focused {
         Block::bordered()
             .title(title)
+            .title_bottom(footer)
             .borders(Borders::ALL)
             .border_type(BorderType::Thick)
             .border_style(Style::default().fg(Color::Green))
@@ -328,4 +332,23 @@ where
             &mut h_scrollbar_state,
         );
     }
+}
+
+fn get_list_footer(selected_item: char) -> Line<'static> {
+    let key_style = Style::default()
+        .fg(Color::Yellow)
+        .add_modifier(Modifier::BOLD);
+    let desc_style = Style::default().fg(Color::Gray);
+
+    let mut footer = Line::from(vec![Span::raw(" ")]);
+    match selected_item {
+        'c' => {
+            footer.push_span(Span::styled("s", key_style));
+            footer.push_span(Span::styled(": stop  ", desc_style));
+            footer.push_span(Span::styled("a", key_style));
+            footer.push_span(Span::styled(": start  ", desc_style));
+        }
+        _ => {}
+    }
+    footer
 }

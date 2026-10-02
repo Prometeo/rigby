@@ -276,9 +276,14 @@ impl App {
         self.load_selected().await
     }
 
-    pub async fn stop_container(&mut self) {
-        if let Some(container) = self.containers.selected() {
-            stop_container(&self.client, &container.id).await;
+    pub async fn footer_action(&mut self) {
+        match self.menu.selected() {
+            Some(MenuItem::Containers) => {
+                if let Some(container) = self.containers.selected() {
+                    stop_container(&self.client, &container.id).await;
+                }
+            }
+            _ => {}
         }
     }
 
