@@ -12,7 +12,8 @@ serde_json = "1"
 crossterm = "0.29.0"
 ratatui = "0.30.2"
 color-eyre = "0.6.3"
-rstest = "0.26.1"
 
 [dev-dependencies]
+rstest = "0.26.1"
+bytes = "1.12.1"
 pretty_assertions="1.4.1"

@@ -3,7 +3,7 @@ use bollard::{
     models::{ContainerSummary, PortSummary},
     plugin::ContainerInspectResponse,
 };
-use color_eyre::Report;
+use color_eyre::{Report, eyre::eyre};
 use std::fmt;
 
 #[derive(Clone)]
@@ -27,6 +27,7 @@ impl TryFrom<ContainerSummary> for DockerContainer {
     type Error = Report;
 
     fn try_from(container: ContainerSummary) -> Result<Self, Self::Error> {
+        let id = container.id.ok_or_else(|| eyre!("Missing container ID"))?;
         let name: String = container
             .names
             .as_ref()
@@ -45,12 +46,14 @@ impl TryFrom<ContainerSummary> for DockerContainer {
             ports.public_port.unwrap_or_default()
         );
 
+        let state = container.state.map(|s| s.to_string()).unwrap_or_default();
+
         Ok(Self {
-            id: container.id.unwrap_or_default(),
+            id: id,
             name,
             image: container.image.unwrap_or_default(),
             created: parse_timestamp_from_epoch(container.created.unwrap_or(0)).unwrap_or_default(),
-            state: container.state.unwrap().to_string(),
+            state: state,
             status: container.status.unwrap_or_default(),
             ports,
         })
@@ -225,5 +228,42 @@ impl fmt::Display for DockerContainerDetail {
             width = field_width
         )?;
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use bollard::models::{ContainerSummary, ContainerSummaryStateEnum};
+
+    #[test]
+    fn test_docker_container_try_from_valid_summary() {
+        let summary = ContainerSummary {
+            id: Some("abc123456789".to_string()),
+            names: Some(vec!["/some-backend".to_string()]),
+            image: Some("some:latest".to_string()),
+            state: Some(ContainerSummaryStateEnum::RUNNING),
+            status: Some("Up 2 hours".to_string()),
+            ..Default::default()
+        };
+
+        let container = DockerContainer::try_from(summary)
+            .expect("Should convert valid summary to DockerContainer");
+
+        assert_eq!(container.id, "abc123456789");
+        assert_eq!(container.name, "some-backend");
+        assert_eq!(container.state, "running");
+    }
+
+    #[test]
+    fn test_docker_container_try_from_missing_id_fails() {
+        let summary = ContainerSummary {
+            id: None,
+            names: Some(vec!["/nameless".to_string()]),
+            ..Default::default()
+        };
+
+        let result = DockerContainer::try_from(summary);
+        assert!(result.is_err(), "Expected error when ID is missing");
     }
 }

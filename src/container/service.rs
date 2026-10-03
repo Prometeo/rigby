@@ -9,7 +9,7 @@ use bollard::{
 };
 use color_eyre::Result;
 use futures_util::StreamExt;
-use tokio::sync::mpsc::{self, UnboundedReceiver, unbounded_channel};
+use tokio::sync::mpsc::{UnboundedReceiver, unbounded_channel};
 use tokio::task::AbortHandle;
 
 pub async fn list_containers(client: &Docker) -> Result<Vec<DockerContainer>> {
@@ -36,7 +36,7 @@ pub fn get_container_logs(
     container_id: String,
     tail: usize,
 ) -> (UnboundedReceiver<String>, AbortHandle) {
-    let (tx, rx) = mpsc::unbounded_channel();
+    let (tx, rx) = unbounded_channel();
 
     let task = tokio::spawn(async move {
         let options = LogsOptions {
@@ -92,5 +92,48 @@ pub async fn start_container(client: &Docker, container_id: &str) {
     match client.start_container(container_id, Some(options)).await {
         Ok(_) => {}
         Err(_) => {}
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use bytes::Bytes;
+
+    #[test]
+    fn test_format_log_chunk_stdout() {
+        let chunk = LogOutput::StdOut {
+            message: Bytes::from_static(b"Application listening on :8000\n"),
+        };
+        let lines = format_log_chunk(chunk).expect("Expected stdout lines");
+        assert_eq!(lines, vec!["Application listening on :8000"]);
+    }
+
+    #[test]
+    fn test_format_log_chunk_console() {
+        let chunk = LogOutput::Console {
+            message: Bytes::from_static(b"Interactive console output\n"),
+        };
+        let lines = format_log_chunk(chunk).expect("Expected console lines");
+        assert_eq!(lines, vec!["Interactive console output"]);
+    }
+
+    #[test]
+    fn test_format_log_chunk_stderr_adds_err_prefix() {
+        let chunk = LogOutput::StdErr {
+            message: Bytes::from_static(b"Connection refused"),
+        };
+        let lines = format_log_chunk(chunk).expect("Expected stderr lines");
+        assert_eq!(lines, vec!["[ERR] Connection refused"]);
+    }
+
+    #[test]
+    fn test_format_log_chunk_multiline_splitting() {
+        let raw = b"first line\nsecond line\r\nthird line";
+        let chunk = LogOutput::StdOut {
+            message: Bytes::from_static(raw),
+        };
+        let lines = format_log_chunk(chunk).expect("Expected multiline parse");
+        assert_eq!(lines, vec!["first line", "second line", "third line"]);
     }
 }
