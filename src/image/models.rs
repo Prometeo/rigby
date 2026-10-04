@@ -137,3 +137,118 @@ impl fmt::Display for DockerImageDetail {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rstest::{fixture, rstest};
+    use std::collections::HashMap;
+
+    // -------------------- fixtures -------------------- //
+    #[fixture]
+    fn default_image() -> DockerImage {
+        DockerImage {
+            id: "sha256:1234567890abcdef".to_string(),
+            tag: vec!["redis:alpine".to_string(), "redis:latest".to_string()],
+            size: "10485760".to_string(),
+            created: "2026-09-28 12:00:00".to_string(),
+            containers: 2,
+        }
+    }
+
+    // image without tags
+    #[fixture]
+    fn untagged_image(mut default_image: DockerImage) -> DockerImage {
+        default_image.tag.clear();
+        default_image
+    }
+
+    // Fully populated ImageConfig fixture
+    #[fixture]
+    fn full_image_config() -> ImageConfig {
+        let mut labels = HashMap::new();
+        labels.insert("maintainer".to_string(), "devops".to_string());
+
+        ImageConfig {
+            user: Some("appuser".to_string()),
+            exposed_ports: Some(vec!["8080/tcp".to_string()]),
+            env: Some(vec!["ENV=prod".to_string()]),
+            cmd: Some(vec!["./run.sh".to_string()]),
+            working_dir: Some("/app".to_string()),
+            labels: Some(labels),
+            entrypoint: Some(vec!["/bin/sh".to_string()]),
+            volumes: Some(vec!["/data".to_string()]),
+            ..Default::default()
+        }
+    }
+
+    // -------------------- tests -------------------- //
+    #[rstest]
+    #[case(vec!["redis:alpine".to_string(), "redis:latest".to_string()], "redis:alpine")]
+    #[case(vec!["my-app:1.0".to_string()], "my-app:1.0")]
+    #[case(vec![], "<none>")]
+    fn test_docker_image_display_tags(#[case] tags: Vec<String>, #[case] expected: &str) {
+        let image = DockerImage {
+            id: "sha256:test".into(),
+            tag: tags,
+            size: "1000".into(),
+            created: "today".into(),
+            containers: 1,
+        };
+        assert_eq!(format!("{image}"), expected);
+    }
+
+    #[rstest]
+    fn test_docker_image_try_from_image_summary() {
+        let summary = ImageSummary {
+            id: "sha256:fedcba".to_string(),
+            repo_tags: vec!["postgres:16".to_string()],
+            size: 52428800,
+            created: 1600000000,
+            containers: 4,
+            ..Default::default()
+        };
+
+        let image =
+            DockerImage::try_from(summary).expect("Should convert cleanly from ImageSummary");
+        assert_eq!(image.id, "sha256:fedcba");
+        assert_eq!(image.tag, vec!["postgres:16"]);
+        assert_eq!(image.size, "52428800");
+        assert_eq!(image.containers, 4);
+        assert!(!image.created.is_empty());
+    }
+
+    #[rstest]
+    fn test_docker_image_detail_new_with_full_values(
+        full_image_config: ImageConfig,
+        default_image: DockerImage,
+    ) {
+        let detail = DockerImageDetail::new(full_image_config, &default_image);
+
+        assert_eq!(detail.id, default_image.id);
+        assert_eq!(detail.tag, "redis:alpine");
+        assert_eq!(detail.user, "appuser");
+        assert_eq!(detail.working_dir, "/app");
+        assert_eq!(detail.env, vec!["ENV=prod"]);
+        assert_eq!(detail.cmd, vec!["./run.sh"]);
+        assert_eq!(detail.entrypoint, vec!["/bin/sh"]);
+        assert_eq!(detail.labels.get("maintainer"), Some(&"devops".to_string()));
+        assert_eq!(detail.containers, default_image.containers);
+    }
+
+    #[rstest]
+    fn test_docker_image_detail_new_falls_back_on_none_fields(untagged_image: DockerImage) {
+        let empty_config = ImageConfig::default();
+        let detail = DockerImageDetail::new(empty_config, &untagged_image);
+
+        assert_eq!(detail.tag, "<none>");
+        assert_eq!(detail.user, "<none>");
+        assert_eq!(detail.working_dir, "<none>");
+        assert!(detail.ports.is_empty());
+        assert!(detail.env.is_empty());
+        assert!(detail.cmd.is_empty());
+        assert!(detail.entrypoint.is_empty());
+        assert!(detail.volumes.is_empty());
+        assert!(detail.labels.is_empty());
+    }
+}
