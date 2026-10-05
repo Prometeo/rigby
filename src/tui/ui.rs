@@ -341,6 +341,8 @@ fn get_list_footer(selected_item: char) -> Line<'static> {
     let desc_style = Style::default().fg(Color::Gray);
 
     let mut footer = Line::from(vec![Span::raw(" ")]);
+
+    #[allow(clippy::single_match)]
     match selected_item {
         'c' => {
             footer.push_span(Span::styled("s", key_style));

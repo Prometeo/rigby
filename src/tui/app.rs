@@ -279,17 +279,14 @@ impl App {
     }
 
     pub async fn footer_action(&mut self, action: char) {
-        match self.menu.selected() {
-            Some(MenuItem::Containers) => {
-                if let Some(container) = self.containers.selected() {
-                    match action {
-                        's' => stop_container(&self.client, &container.id).await,
-                        'a' => start_container(&self.client, &container.id).await,
-                        _ => {}
-                    }
-                }
+        if let Some(MenuItem::Containers) = self.menu.selected()
+            && let Some(container) = self.containers.selected()
+        {
+            match action {
+                's' => stop_container(&self.client, &container.id).await,
+                'a' => start_container(&self.client, &container.id).await,
+                _ => {}
             }
-            _ => {}
         }
     }
 
@@ -434,22 +431,16 @@ impl App {
             && (self.focus == Focus::Content)
         {
             self.container_tab = match tab {
-                'd' => {
-                    if self.container_tab != ContainerTab::Details {
-                        self.stop_logs_stream();
-                        ContainerTab::Details
-                    } else {
-                        return;
-                    }
+                'd' if self.container_tab != ContainerTab::Details => {
+                    self.stop_logs_stream();
+                    ContainerTab::Details
                 }
-                'l' => {
-                    if self.container_tab != ContainerTab::Logs {
-                        self.start_logs_stream();
-                        ContainerTab::Logs
-                    } else {
-                        return;
-                    }
+
+                'l' if self.container_tab != ContainerTab::Logs => {
+                    self.start_logs_stream();
+                    ContainerTab::Logs
                 }
+
                 _ => return,
             };
         }

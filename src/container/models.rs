@@ -49,11 +49,11 @@ impl TryFrom<ContainerSummary> for DockerContainer {
         let state = container.state.map(|s| s.to_string()).unwrap_or_default();
 
         Ok(Self {
-            id: id,
+            id,
             name,
             image: container.image.unwrap_or_default(),
             created: parse_timestamp_from_epoch(container.created.unwrap_or(0)).unwrap_or_default(),
-            state: state,
+            state,
             status: container.status.unwrap_or_default(),
             ports,
         })

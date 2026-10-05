@@ -81,18 +81,20 @@ pub fn format_log_chunk(output: LogOutput) -> Option<Vec<String>> {
 
 pub async fn stop_container(client: &Docker, container_id: &str) {
     let options = StopContainerOptionsBuilder::default().t(0).build();
-    match client.stop_container(container_id, Some(options)).await {
-        Ok(_) => {}
-        Err(_) => {}
-    }
+    if client
+        .stop_container(container_id, Some(options))
+        .await
+        .is_ok()
+    {};
 }
 
 pub async fn start_container(client: &Docker, container_id: &str) {
     let options: StartContainerOptions = Default::default();
-    match client.start_container(container_id, Some(options)).await {
-        Ok(_) => {}
-        Err(_) => {}
-    }
+    if client
+        .start_container(container_id, Some(options))
+        .await
+        .is_ok()
+    {}
 }
 
 #[cfg(test)]
