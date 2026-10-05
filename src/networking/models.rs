@@ -53,7 +53,7 @@ pub struct DockerNetworkDetail {
 
 impl DockerNetworkDetail {
     pub fn new(network: &DockerNetwork, network_info: NetworkInspect) -> Self {
-        let ipam_info = network_info.ipam.unwrap();
+        let ipam_info = network_info.ipam.unwrap_or_default();
         let configs = ipam_info
             .config
             .unwrap_or_default()
@@ -196,5 +196,178 @@ impl fmt::Display for DockerNetworkDetail {
             )?;
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use bollard::models::{EndpointResource, Ipam, IpamConfig, Network, NetworkInspect};
+    use pretty_assertions::assert_eq;
+    use rstest::{fixture, rstest};
+    use std::collections::HashMap;
+
+    // -------------------- fixtures -------------------- //
+    #[fixture]
+    fn default_docker_network() -> DockerNetwork {
+        DockerNetwork {
+            name: "bridge".to_string(),
+        }
+    }
+
+    #[fixture]
+    fn full_network_inspect() -> NetworkInspect {
+        let mut labels = HashMap::new();
+        labels.insert(
+            "com.docker.network.bridge.name".to_string(),
+            "docker0".to_string(),
+        );
+
+        let mut options = HashMap::new();
+        options.insert("icc".to_string(), "true".to_string());
+
+        let mut containers = HashMap::new();
+        containers.insert(
+            "container-abc-123".to_string(),
+            EndpointResource {
+                name: Some("web-app".to_string()),
+                endpoint_id: Some("ep-1".to_string()),
+                mac_address: Some("02:42:ac:11:00:02".to_string()),
+                ipv4_address: Some("172.17.0.2/16".to_string()),
+                ipv6_address: Some("".to_string()),
+            },
+        );
+
+        let ipam_config = IpamConfig {
+            subnet: Some("172.17.0.0/16".to_string()),
+            gateway: Some("172.17.0.1".to_string()),
+            ip_range: Some("172.17.0.0/24".to_string()),
+            auxiliary_addresses: None,
+        };
+
+        let ipam = Ipam {
+            driver: Some("default".to_string()),
+            config: Some(vec![ipam_config]),
+            options: None,
+        };
+
+        NetworkInspect {
+            id: Some("network-id-xyz789".to_string()),
+            name: Some("bridge".to_string()),
+            created: Some("2026-10-04T12:00:00Z".to_string()),
+            scope: Some("local".to_string()),
+            driver: Some("bridge".to_string()),
+            enable_ipv6: Some(false),
+            internal: Some(false),
+            attachable: Some(true),
+            ingress: Some(false),
+            containers: Some(containers),
+            options: Some(options),
+            labels: Some(labels),
+            ipam: Some(ipam),
+            ..Default::default()
+        }
+    }
+
+    #[fixture]
+    fn empty_network_inspect() -> NetworkInspect {
+        NetworkInspect {
+            ipam: Some(Ipam::default()),
+            ..Default::default()
+        }
+    }
+
+    // -------------------- tests -------------------- //
+
+    #[rstest]
+    #[case("custom-network", "custom-network")]
+    #[case("host", "host")]
+    fn test_docker_network_display(#[case] name: &str, #[case] expected: &str) {
+        let network = DockerNetwork {
+            name: name.to_string(),
+        };
+        assert_eq!(format!("{network}"), expected);
+    }
+
+    #[rstest]
+    fn test_docker_network_try_from_valid_network() {
+        let raw = Network {
+            name: Some("frontend-tier".to_string()),
+            ..Default::default()
+        };
+
+        let result = DockerNetwork::try_from(raw).expect("Should convert cleanly");
+        assert_eq!(result.name, "frontend-tier");
+    }
+
+    #[rstest]
+    fn test_docker_network_try_from_none_name_falls_back() {
+        let raw = Network {
+            name: None,
+            ..Default::default()
+        };
+
+        let result = DockerNetwork::try_from(raw).expect("Should convert with fallback");
+        assert_eq!(result.name, "<none>");
+    }
+
+    #[rstest]
+    fn test_docker_network_detail_new_with_full_values(
+        default_docker_network: DockerNetwork,
+        full_network_inspect: NetworkInspect,
+    ) {
+        let detail = DockerNetworkDetail::new(&default_docker_network, full_network_inspect);
+
+        assert_eq!(detail.id, "network-id-xyz789");
+        assert_eq!(detail.name, "bridge");
+        assert_eq!(detail.created, "2026-10-04T12:00:00Z");
+        assert_eq!(detail.scope, "local");
+        assert_eq!(detail.driver, "bridge");
+        assert_eq!(detail.enable_ipv6, false);
+        assert_eq!(detail.internal, false);
+        assert_eq!(detail.attachable, true);
+        assert_eq!(detail.ingress, false);
+        assert_eq!(detail.options.get("icc"), Some(&"true".to_string()));
+        assert_eq!(
+            detail.labels.get("com.docker.network.bridge.name"),
+            Some(&"docker0".to_string())
+        );
+
+        assert_eq!(detail.ipam.driver, "default");
+        assert_eq!(detail.ipam.configs.len(), 1);
+        assert_eq!(
+            detail.ipam.configs[0].subnet,
+            Some("172.17.0.0/16".to_string())
+        );
+        assert_eq!(
+            detail.ipam.configs[0].gateway,
+            Some("172.17.0.1".to_string())
+        );
+        assert_eq!(
+            detail.ipam.configs[0].ip_range,
+            Some("172.17.0.0/24".to_string())
+        );
+    }
+
+    #[rstest]
+    fn test_docker_network_detail_new_with_none_fields_uses_fallbacks(
+        default_docker_network: DockerNetwork,
+        empty_network_inspect: NetworkInspect,
+    ) {
+        let detail = DockerNetworkDetail::new(&default_docker_network, empty_network_inspect);
+
+        assert_eq!(detail.id, "<none>");
+        assert_eq!(detail.created, "<none>");
+        assert_eq!(detail.scope, "<none>");
+        assert_eq!(detail.driver, "<none>");
+        assert_eq!(detail.enable_ipv6, false);
+        assert_eq!(detail.internal, false);
+        assert_eq!(detail.attachable, false);
+        assert_eq!(detail.ingress, false);
+        assert!(detail.containers.is_empty());
+        assert!(detail.options.is_empty());
+        assert!(detail.labels.is_empty());
+        assert_eq!(detail.ipam.driver, "<none>");
+        assert!(detail.ipam.configs.is_empty());
     }
 }

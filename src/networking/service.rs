@@ -8,7 +8,6 @@ pub async fn list_networks(client: &Docker) -> Result<Vec<DockerNetwork>> {
         .await?;
     networks.into_iter().map(DockerNetwork::try_from).collect()
 }
-
 pub async fn inspect_network(
     client: &Docker,
     network: &DockerNetwork,
@@ -20,4 +19,21 @@ pub async fn inspect_network(
         )
         .await?;
     Ok(DockerNetworkDetail::new(network, network_info))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use pretty_assertions::assert_eq;
+
+    #[test]
+    fn test_converts_network_summary_to_docker_image() {
+        let network = Network {
+            name: Some("network-test".into()),
+            ..Default::default()
+        };
+
+        let docker_network = DockerNetwork::try_from(network).unwrap();
+        assert_eq!(docker_network.name, "network-test");
+    }
 }
