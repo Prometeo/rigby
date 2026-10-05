@@ -27,7 +27,7 @@ mod tests {
     use pretty_assertions::assert_eq;
 
     #[test]
-    fn test_converts_network_summary_to_docker_image() {
+    fn test_converts_network_to_docker_network() {
         let network = Network {
             name: Some("network-test".into()),
             ..Default::default()
