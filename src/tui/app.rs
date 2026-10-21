@@ -292,7 +292,10 @@ impl App {
 
     pub async fn move_items_list_up(&mut self) {
         match self.menu.selected() {
-            Some(MenuItem::Images) => self.images.move_up(),
+            Some(MenuItem::Images) => {
+                self.images.move_up();
+                self.load_selected_details().await;
+            }
             Some(MenuItem::Containers) => {
                 self.containers.move_up();
                 match self.container_tab {
@@ -300,15 +303,24 @@ impl App {
                     ContainerTab::Details => self.load_selected_details().await,
                 }
             }
-            Some(MenuItem::Networks) => self.networks.move_up(),
-            Some(MenuItem::Volumes) => self.volumes.move_up(),
+            Some(MenuItem::Networks) => {
+                self.networks.move_up();
+                self.load_selected_details().await;
+            }
+            Some(MenuItem::Volumes) => {
+                self.volumes.move_up();
+                self.load_selected_details().await;
+            }
             _ => {}
         }
     }
 
     pub async fn move_items_list_down(&mut self) {
         match self.menu.selected() {
-            Some(MenuItem::Images) => self.images.move_down(),
+            Some(MenuItem::Images) => {
+                self.images.move_down();
+                self.load_selected_details().await;
+            }
             Some(MenuItem::Containers) => {
                 self.containers.move_down();
                 match self.container_tab {
@@ -316,8 +328,14 @@ impl App {
                     ContainerTab::Details => self.load_selected_details().await,
                 }
             }
-            Some(MenuItem::Networks) => self.networks.move_down(),
-            Some(MenuItem::Volumes) => self.volumes.move_down(),
+            Some(MenuItem::Networks) => {
+                self.networks.move_down();
+                self.load_selected_details().await;
+            }
+            Some(MenuItem::Volumes) => {
+                self.volumes.move_down();
+                self.load_selected_details().await;
+            }
             _ => {}
         }
     }
