@@ -8,11 +8,10 @@ use ratatui::{
     style::{Color, Modifier, Style, Stylize},
     text::{Line, Span, Text},
     widgets::{
-        Block, BorderType, Borders, List, ListItem, ListState, Paragraph, Scrollbar,
-        ScrollbarOrientation, ScrollbarState, Tabs,
+        Block, BorderType, List, ListItem, ListState, Paragraph, Scrollbar, ScrollbarOrientation,
+        ScrollbarState, Tabs,
     },
 };
-use std::rc::Rc;
 
 pub fn render(app: &mut App, frame: &mut Frame) {
     let rows = Layout::default()
@@ -31,57 +30,34 @@ pub fn render(app: &mut App, frame: &mut Frame) {
 
     // ----------------- Middle Items List -----------------
     let items_area = panels[0];
+    let list_focused = app.focus == Focus::ItemsList;
 
     match app.menu.selected() {
         Some(MenuItem::Containers) => {
-            render_list(
-                &app.containers.items,
-                items_area,
-                &mut app.containers.state,
-                frame,
-                "Containers",
-                app.focus == Focus::ItemsList,
-                render_container_item,
-                get_list_footer('c'),
-            );
+            CustomList::with_renderer(&app.containers.items, "Containers", render_container_item)
+                .focused(list_focused)
+                .footer(get_list_footer('c'))
+                .render(frame, items_area, &mut app.containers.state);
         }
         Some(MenuItem::Images) => {
-            render_list(
-                &app.images.items,
-                items_area,
-                &mut app.images.state,
-                frame,
-                "Images",
-                app.focus == Focus::ItemsList,
-                |item| ListItem::new(item.to_string()),
-                get_list_footer('i'),
-            );
+            CustomList::new(&app.images.items, "Images")
+                .focused(list_focused)
+                .footer(get_list_footer('i'))
+                .render(frame, items_area, &mut app.images.state);
             app.container_tab = ContainerTab::Details;
         }
         Some(MenuItem::Networks) => {
-            render_list(
-                &app.networks.items,
-                items_area,
-                &mut app.networks.state,
-                frame,
-                "Networks",
-                app.focus == Focus::ItemsList,
-                |item| ListItem::new(item.to_string()),
-                get_list_footer('n'),
-            );
+            CustomList::new(&app.networks.items, "Networks")
+                .focused(list_focused)
+                .footer(get_list_footer('n'))
+                .render(frame, items_area, &mut app.networks.state);
             app.container_tab = ContainerTab::Details;
         }
         Some(MenuItem::Volumes) => {
-            render_list(
-                &app.volumes.items,
-                items_area,
-                &mut app.volumes.state,
-                frame,
-                "Volumes",
-                app.focus == Focus::ItemsList,
-                |item| ListItem::new(item.to_string()),
-                get_list_footer('v'),
-            );
+            CustomList::new(&app.volumes.items, "Volumes")
+                .focused(list_focused)
+                .footer(get_list_footer('v'))
+                .render(frame, items_area, &mut app.volumes.state);
             app.container_tab = ContainerTab::Details;
         }
         None => {}
@@ -128,41 +104,85 @@ fn render_menu_tabs(app: &App, area: Rect, frame: &mut Frame) {
     frame.render_widget(tabs, area);
 }
 
-fn render_list<T, F>(
-    items: &[T],
-    area: Rect,
-    state: &mut ListState,
-    frame: &mut Frame,
-    title: &str,
-    focused: bool,
+pub struct CustomList<'a, T, F> {
+    items: &'a [T],
+    title: &'a str,
     item_renderer: F,
-    footer: Line,
-) where
+    focused: bool,
+    footer: Option<Line<'a>>,
+}
+
+impl<'a, T: ToString> CustomList<'a, T, fn(&T) -> ListItem<'static>> {
+    /// Creates a list using `ToString` as the default item renderer
+    pub fn new(items: &'a [T], title: &'a str) -> Self {
+        Self {
+            items,
+            title,
+            item_renderer: |item| ListItem::new(item.to_string()),
+            focused: false,
+            footer: None,
+        }
+    }
+}
+
+impl<'a, T, F> CustomList<'a, T, F>
+where
     F: Fn(&T) -> ListItem<'static>,
 {
-    let items = items.iter().map(item_renderer);
-    let block = if focused {
+    /// Creates a list with a custom item-rendering function
+    pub fn with_renderer(items: &'a [T], title: &'a str, item_renderer: F) -> Self {
+        Self {
+            items,
+            title,
+            item_renderer,
+            focused: false,
+            footer: None,
+        }
+    }
+
+    pub fn focused(mut self, focused: bool) -> Self {
+        self.focused = focused;
+        self
+    }
+
+    pub fn footer(mut self, footer: Line<'a>) -> Self {
+        self.footer = Some(footer);
+        self
+    }
+
+    pub fn render(self, frame: &mut Frame, area: Rect, state: &mut ListState) {
+        let items = self.items.iter().map(self.item_renderer);
+        let mut block = styled_block(self.title, self.focused);
+        if self.focused
+            && let Some(footer) = self.footer
+        {
+            block = block.title_bottom(footer);
+        }
+
+        let list = List::new(items)
+            .block(block)
+            .highlight_symbol("> ")
+            .highlight_style(
+                Style::default()
+                    .bg(Color::Rgb(45, 55, 72))
+                    .add_modifier(Modifier::BOLD),
+            )
+            .fg(Color::Blue);
+
+        frame.render_stateful_widget(list, area, state);
+    }
+}
+
+/// Shared helper for consistent focused/unfocused borders across panels
+fn styled_block(title: &str, focused: bool) -> Block<'_> {
+    if focused {
         Block::bordered()
             .title(title)
-            .title_bottom(footer)
-            .borders(Borders::ALL)
             .border_type(BorderType::Thick)
             .border_style(Style::default().fg(Color::Green))
     } else {
-        Block::bordered().title(title).borders(Borders::ALL)
-    };
-
-    let list = List::new(items)
-        .block(block)
-        .highlight_symbol("> ")
-        .highlight_style(
-            Style::default()
-                .bg(Color::Rgb(45, 55, 72))
-                .add_modifier(Modifier::BOLD),
-        )
-        .fg(Color::Blue);
-
-    frame.render_stateful_widget(list, area, state);
+        Block::bordered().title(title)
+    }
 }
 
 fn render_content(app: &mut App, area: Rect, frame: &mut Frame, focused: bool) {
@@ -171,22 +191,9 @@ fn render_content(app: &mut App, area: Rect, frame: &mut Frame, focused: bool) {
         .direction(Direction::Vertical)
         .constraints([Constraint::Length(3), Constraint::Min(0)])
         .split(area);
-    render_detail_tabs(app, frame, &rows);
+    render_detail_tabs(app, frame, rows[0]);
 
     let content_area = rows[1];
-
-    let make_block = |title: &str| {
-        let title_owned = title.to_string();
-        if focused {
-            Block::bordered()
-                .title(title_owned)
-                .borders(Borders::ALL)
-                .border_type(BorderType::Thick)
-                .border_style(Style::default().fg(Color::Green))
-        } else {
-            Block::bordered().title(title_owned).borders(Borders::ALL)
-        }
-    };
 
     match app.container_tab {
         ContainerTab::Details => {
@@ -196,12 +203,13 @@ fn render_content(app: &mut App, area: Rect, frame: &mut Frame, focused: bool) {
                 .map(ToString::to_string)
                 .unwrap_or_else(|| "Nothing Selected".into());
 
-            let paragraph = Paragraph::new(Text::from(details)).block(make_block(" Details "));
+            let paragraph =
+                Paragraph::new(Text::from(details)).block(styled_block(" Details ", focused));
 
             frame.render_widget(paragraph, content_area);
         }
 
-        ContainerTab::Logs => render_logs(app, make_block, frame, content_area),
+        ContainerTab::Logs => render_logs(app, focused, frame, content_area),
     }
 }
 
@@ -222,7 +230,7 @@ fn render_container_item(container: &DockerContainer) -> ListItem<'static> {
     ListItem::new(line)
 }
 
-fn render_detail_tabs(app: &App, frame: &mut Frame, rows: &Rc<[Rect]>) {
+fn render_detail_tabs(app: &App, frame: &mut Frame, area: Rect) {
     let mut tab_titles = vec![Line::from(" Details ")];
     if matches!(app.menu.selected(), Some(MenuItem::Containers)) {
         tab_titles.push(Line::from(" Logs "));
@@ -243,15 +251,13 @@ fn render_detail_tabs(app: &App, frame: &mut Frame, rows: &Rc<[Rect]>) {
         )
         .divider("|");
 
-    frame.render_widget(tabs, rows[0]);
+    frame.render_widget(tabs, area);
 }
 
-fn render_logs<F>(app: &mut App, make_block: F, frame: &mut Frame, area: Rect)
-where
-    F: Fn(&str) -> Block<'static>,
-{
+fn render_logs(app: &mut App, focused: bool, frame: &mut Frame, area: Rect) {
     if app.container_logs.is_empty() {
-        let paragraph = Paragraph::new(Text::from("No logs available")).block(make_block(" Logs "));
+        let paragraph =
+            Paragraph::new(Text::from("No logs available")).block(styled_block(" Logs ", focused));
         frame.render_widget(paragraph, area);
         return;
     }
@@ -302,7 +308,7 @@ where
 
     // Render Paragraph with 2D Scroll
     let paragraph = Paragraph::new(Text::from(lines))
-        .block(make_block(title))
+        .block(styled_block(title, focused))
         .scroll((vertical_scroll, horizontal_scroll));
 
     frame.render_widget(paragraph, area);
