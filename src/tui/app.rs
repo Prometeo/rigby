@@ -78,6 +78,39 @@ pub struct StatefullList<T> {
 }
 
 impl<T> StatefullList<T> {
+    pub fn update_items<F, K>(&mut self, mut new_items: Vec<T>, key_fn: F)
+    where
+        F: Fn(&T) -> K,
+        K: Ord,
+    {
+        let selected_key = self.selected().map(&key_fn);
+
+        new_items.sort_by_key(&key_fn);
+        self.items = new_items;
+
+        // Restore selection
+        if self.items.is_empty() {
+            self.state.select(None);
+            return;
+        }
+
+        if let Some(target_key) = selected_key {
+            // Find where the previously selected item is now
+            if let Some(new_pos) = self
+                .items
+                .iter()
+                .position(|item| key_fn(item) == target_key)
+            {
+                self.state.select(Some(new_pos));
+                return;
+            }
+        }
+
+        let current_index = self.state.selected().unwrap_or(0);
+        self.state
+            .select(Some(current_index.min(self.items.len() - 1)));
+    }
+
     pub fn select_first(&mut self) {
         if !self.items.is_empty() {
             self.state.select(Some(0));
@@ -176,10 +209,12 @@ impl App {
 
         if let Some(rx) = self.poll_rx.as_mut() {
             while let Ok(data) = rx.try_recv() {
-                self.containers.items = data.containers;
-                self.images.items = data.images;
-                self.volumes.items = data.volumes;
-                self.networks.items = data.networks;
+                self.containers
+                    .update_items(data.containers, |c| c.id.clone());
+                self.images.update_items(data.images, |i| i.id.clone());
+                self.volumes.update_items(data.volumes, |v| v.name.clone());
+                self.networks
+                    .update_items(data.networks, |n| n.name.clone());
             }
         }
 
