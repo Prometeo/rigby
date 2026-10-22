@@ -391,7 +391,8 @@ impl App {
             Some(MenuItem::Images) => {
                 self.stop_logs_stream();
                 if self.images.items.is_empty() {
-                    self.images.items = list_images(&self.client).await.unwrap_or_default();
+                    let images = list_images(&self.client).await.unwrap_or_default();
+                    self.images.update_items(images, |i| i.id.clone());
                 }
                 self.images.select_first();
                 self.load_selected_details().await;
@@ -400,7 +401,8 @@ impl App {
             Some(MenuItem::Containers) => {
                 self.stop_logs_stream();
                 if self.containers.items.is_empty() {
-                    self.containers.items = list_containers(&self.client).await.unwrap_or_default();
+                    let containers = list_containers(&self.client).await.unwrap_or_default();
+                    self.containers.update_items(containers, |c| c.id.clone());
                 }
                 self.container_tab = ContainerTab::Details;
                 self.containers.select_first();
@@ -410,7 +412,8 @@ impl App {
             Some(MenuItem::Volumes) => {
                 self.stop_logs_stream();
                 if self.volumes.items.is_empty() {
-                    self.volumes.items = list_volumes(&self.client).await.unwrap_or_default();
+                    let volumes = list_volumes(&self.client).await.unwrap_or_default();
+                    self.volumes.update_items(volumes, |v| v.name.clone());
                 }
                 self.volumes.select_first();
                 self.load_selected_details().await;
@@ -419,7 +422,8 @@ impl App {
             Some(MenuItem::Networks) => {
                 self.stop_logs_stream();
                 if self.networks.items.is_empty() {
-                    self.networks.items = list_networks(&self.client).await.unwrap_or_default();
+                    let networks = list_networks(&self.client).await.unwrap_or_default();
+                    self.networks.update_items(networks, |n| n.name.clone());
                 }
                 self.networks.select_first();
                 self.load_selected_details().await;
