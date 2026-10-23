@@ -14,7 +14,7 @@ use tui::update::update;
 #[tokio::main]
 async fn main() -> Result<()> {
     let mut app: App = App::new();
-    app.poll_rx = Some(App::spawn_docker_poller(app.client.clone()));
+    app.event_rx = Some(App::spawn_docker_event_listener(app.client.clone()));
     app.menu_data_loaded().await;
 
     let backend = CrosstermBackend::new(BufWriter::new(stderr()));

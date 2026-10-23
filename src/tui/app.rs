@@ -21,10 +21,11 @@ use crate::{
     volume::service::inspect_volume,
 };
 use bollard::Docker;
+use bollard::models::EventMessageTypeEnum;
 use color_eyre::Result;
+use futures_util::StreamExt;
 use ratatui::widgets::ListState;
 use std::fmt;
-use std::time::Duration;
 use tokio::sync::mpsc::{UnboundedReceiver, unbounded_channel};
 use tokio::task::AbortHandle;
 
@@ -151,11 +152,11 @@ impl<T> Default for StatefullList<T> {
     }
 }
 
-pub struct DockerPollData {
-    pub containers: Vec<DockerContainer>,
-    pub images: Vec<DockerImage>,
-    pub volumes: Vec<DockerVolume>,
-    pub networks: Vec<DockerNetwork>,
+pub enum DockerEventUpdate {
+    Containers(Vec<DockerContainer>),
+    Images(Vec<DockerImage>),
+    Volumes(Vec<DockerVolume>),
+    Networks(Vec<DockerNetwork>),
 }
 
 #[derive(Default, PartialEq, Eq, Clone)]
@@ -184,7 +185,7 @@ pub struct App {
     pub log_auto_scroll: bool,
     pub log_visible_height: u16,
     pub log_visible_width: u16,
-    pub poll_rx: Option<UnboundedReceiver<DockerPollData>>,
+    pub event_rx: Option<UnboundedReceiver<DockerEventUpdate>>,
 }
 
 impl App {
@@ -207,15 +208,48 @@ impl App {
             }
         }
 
-        if let Some(rx) = self.poll_rx.as_mut() {
-            while let Ok(data) = rx.try_recv() {
-                self.containers
-                    .update_items(data.containers, |c| c.id.clone());
-                self.images.update_items(data.images, |i| i.id.clone());
-                self.volumes.update_items(data.volumes, |v| v.name.clone());
-                self.networks
-                    .update_items(data.networks, |n| n.name.clone());
+        let mut pending_updates = Vec::new();
+        if let Some(rx) = self.event_rx.as_mut() {
+            while let Ok(update) = rx.try_recv() {
+                pending_updates.push(update);
             }
+        }
+
+        let mut reload_details = false;
+
+        for update in pending_updates {
+            match update {
+                DockerEventUpdate::Containers(conts) => {
+                    self.containers.update_items(conts, |c| c.id.clone());
+                    if let Some(MenuItem::Containers) = self.menu.selected()
+                        && self.container_tab == ContainerTab::Details
+                    {
+                        reload_details = true;
+                    }
+                }
+                DockerEventUpdate::Images(imgs) => {
+                    self.images.update_items(imgs, |i| i.id.clone());
+                    if let Some(MenuItem::Images) = self.menu.selected() {
+                        reload_details = true;
+                    }
+                }
+                DockerEventUpdate::Volumes(vols) => {
+                    self.volumes.update_items(vols, |v| v.name.clone());
+                    if let Some(MenuItem::Volumes) = self.menu.selected() {
+                        reload_details = true;
+                    }
+                }
+                DockerEventUpdate::Networks(nets) => {
+                    self.networks.update_items(nets, |n| n.name.clone());
+                    if let Some(MenuItem::Networks) = self.menu.selected() {
+                        reload_details = true;
+                    }
+                }
+            }
+        }
+
+        if reload_details {
+            self.load_selected_details().await;
         }
 
         Ok(())
@@ -507,31 +541,37 @@ impl App {
         self.quit = true;
     }
 
-    pub fn spawn_docker_poller(client: Docker) -> UnboundedReceiver<DockerPollData> {
+    pub fn spawn_docker_event_listener(client: Docker) -> UnboundedReceiver<DockerEventUpdate> {
         let (tx, rx) = unbounded_channel();
 
         tokio::spawn(async move {
-            let mut interval = tokio::time::interval(Duration::from_secs(1));
-            loop {
-                interval.tick().await;
+            let mut event_stream = client.events(None);
 
-                // Fetch in parallel or sequentially in background without touching UI thread
-                let (containers, images, volumes, networks) = tokio::join!(
-                    list_containers(&client),
-                    list_images(&client),
-                    list_volumes(&client),
-                    list_networks(&client),
-                );
+            while let Some(event_result) = event_stream.next().await {
+                let Ok(event) = event_result else { continue };
 
-                let data = DockerPollData {
-                    containers: containers.unwrap_or_default(),
-                    images: images.unwrap_or_default(),
-                    volumes: volumes.unwrap_or_default(),
-                    networks: networks.unwrap_or_default(),
-                };
-
-                if tx.send(data).is_err() {
-                    break;
+                match event.typ {
+                    Some(EventMessageTypeEnum::CONTAINER) => {
+                        if let Ok(containers) = list_containers(&client).await {
+                            let _ = tx.send(DockerEventUpdate::Containers(containers));
+                        }
+                    }
+                    Some(EventMessageTypeEnum::VOLUME) => {
+                        if let Ok(volumes) = list_volumes(&client).await {
+                            let _ = tx.send(DockerEventUpdate::Volumes(volumes));
+                        }
+                    }
+                    Some(EventMessageTypeEnum::NETWORK) => {
+                        if let Ok(networks) = list_networks(&client).await {
+                            let _ = tx.send(DockerEventUpdate::Networks(networks));
+                        }
+                    }
+                    Some(EventMessageTypeEnum::IMAGE) => {
+                        if let Ok(images) = list_images(&client).await {
+                            let _ = tx.send(DockerEventUpdate::Images(images));
+                        }
+                    }
+                    _ => {}
                 }
             }
         });
@@ -552,6 +592,8 @@ impl Default for App {
             MenuItem::Volumes,
             MenuItem::Networks,
         ];
+
+        let event_rx = Some(Self::spawn_docker_event_listener(client.clone()));
         Self {
             quit: false,
             menu,
@@ -571,7 +613,7 @@ impl Default for App {
             log_auto_scroll: true,
             log_visible_height: 20,
             log_visible_width: 5,
-            poll_rx: None,
+            event_rx,
         }
     }
 }
