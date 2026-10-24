@@ -3,7 +3,7 @@ use bollard::{
     Docker,
     container::LogOutput,
     query_parameters::{
-        ListContainersOptionsBuilder, LogsOptions, StartContainerOptions,
+        ListContainersOptionsBuilder, LogsOptions, RemoveContainerOptions, StartContainerOptions,
         StopContainerOptionsBuilder,
     },
 };
@@ -77,6 +77,15 @@ pub fn format_log_chunk(output: LogOutput) -> Option<Vec<String>> {
     };
 
     Some(text.lines().map(ToString::to_string).collect())
+}
+
+pub async fn remove_container(client: &Docker, container_id: &str) {
+    let options = RemoveContainerOptions::default();
+    if client
+        .remove_container(container_id, Some(options))
+        .await
+        .is_ok()
+    {};
 }
 
 pub async fn stop_container(client: &Docker, container_id: &str) {

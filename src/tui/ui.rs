@@ -355,6 +355,8 @@ fn get_list_footer(selected_item: char) -> Line<'static> {
             footer.push_span(Span::styled(": stop  ", desc_style));
             footer.push_span(Span::styled("a", key_style));
             footer.push_span(Span::styled(": start  ", desc_style));
+            footer.push_span(Span::styled("r", key_style));
+            footer.push_span(Span::styled(": remove  ", desc_style));
         }
         _ => {}
     }

@@ -1,7 +1,3 @@
-use crate::image::{
-    models::{DockerImage, DockerImageDetail},
-    service::{inspect_image, list_images},
-};
 use crate::networking::{
     models::{DockerNetwork, DockerNetworkDetail},
     service::{inspect_network, list_networks},
@@ -10,6 +6,13 @@ use crate::utils::driver_connector;
 use crate::volume::{
     models::{DockerVolume, DockerVolumeDetail},
     service::list_volumes,
+};
+use crate::{
+    container::service::remove_container,
+    image::{
+        models::{DockerImage, DockerImageDetail},
+        service::{inspect_image, list_images},
+    },
 };
 use crate::{
     container::{
@@ -354,6 +357,7 @@ impl App {
             match action {
                 's' => stop_container(&self.client, &container.id).await,
                 'a' => start_container(&self.client, &container.id).await,
+                'r' => remove_container(&self.client, &container.id).await,
                 _ => {}
             }
         }
