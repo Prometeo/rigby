@@ -3,8 +3,8 @@ use bollard::{
     Docker,
     container::LogOutput,
     query_parameters::{
-        ListContainersOptionsBuilder, LogsOptions, RemoveContainerOptions, StartContainerOptions,
-        StopContainerOptionsBuilder,
+        ListContainersOptionsBuilder, LogsOptions, RemoveContainerOptions, RestartContainerOptions,
+        StartContainerOptions, StopContainerOptionsBuilder,
     },
 };
 use color_eyre::Result;
@@ -101,6 +101,15 @@ pub async fn start_container(client: &Docker, container_id: &str) {
     let options: StartContainerOptions = Default::default();
     if client
         .start_container(container_id, Some(options))
+        .await
+        .is_ok()
+    {}
+}
+
+pub async fn restart_container(client: &Docker, container_id: &str) {
+    let options = RestartContainerOptions::default();
+    if client
+        .restart_container(&container_id, Some(options))
         .await
         .is_ok()
     {}
