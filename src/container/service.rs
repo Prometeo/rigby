@@ -109,7 +109,7 @@ pub async fn start_container(client: &Docker, container_id: &str) {
 pub async fn restart_container(client: &Docker, container_id: &str) {
     let options = RestartContainerOptions::default();
     if client
-        .restart_container(&container_id, Some(options))
+        .restart_container(container_id, Some(options))
         .await
         .is_ok()
     {}
