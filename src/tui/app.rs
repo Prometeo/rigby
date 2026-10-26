@@ -27,6 +27,7 @@ use crate::{
     volume::service::inspect_volume,
 };
 use bollard::Docker;
+use bollard::exec::{CreateExecOptions, StartExecResults};
 use bollard::models::EventMessageTypeEnum;
 use color_eyre::Result;
 use futures_util::StreamExt;
@@ -172,6 +173,13 @@ pub enum ContainerTab {
     Logs,
 }
 
+#[derive(Default, PartialEq, Eq, Clone)]
+pub enum InputMode {
+    #[default]
+    Normal,
+    Editing,
+}
+
 pub struct App {
     pub quit: bool,
     pub menu: StatefullList<MenuItem>,
@@ -192,6 +200,9 @@ pub struct App {
     pub log_visible_height: u16,
     pub log_visible_width: u16,
     pub event_rx: Option<UnboundedReceiver<DockerEventUpdate>>,
+    pub input_mode: InputMode,
+    pub command_input: String,
+    pub exec_log_rx: Option<UnboundedReceiver<String>>,
 }
 
 impl App {
@@ -202,18 +213,30 @@ impl App {
     pub async fn tick(&mut self) -> Result<()> {
         const MAX_LOG_LINES: usize = 5000;
 
+        // Read standard container logs
         if let Some(rx) = self.log_rx.as_mut() {
             while let Ok(line) = rx.try_recv() {
                 self.container_logs.push(line);
             }
+        }
 
-            if self.container_logs.len() > MAX_LOG_LINES {
-                let excess = self.container_logs.len() - MAX_LOG_LINES;
-                self.container_logs.drain(0..excess);
-                self.log_vertical_scroll = self.log_vertical_scroll.saturating_sub(excess as u16);
+        // Read execution logs
+        if let Some(rx) = self.exec_log_rx.as_mut() {
+            while let Ok(line) = rx.try_recv() {
+                for sub_line in line.lines() {
+                    self.container_logs.push(sub_line.to_string());
+                }
             }
         }
 
+        // Truncate logs if they get too long
+        if self.container_logs.len() > MAX_LOG_LINES {
+            let excess = self.container_logs.len() - MAX_LOG_LINES;
+            self.container_logs.drain(0..excess);
+            self.log_vertical_scroll = self.log_vertical_scroll.saturating_sub(excess as u16);
+        }
+
+        // Handle Docker eventsñ
         let mut pending_updates = Vec::new();
         if let Some(rx) = self.event_rx.as_mut() {
             while let Ok(update) = rx.try_recv() {
@@ -362,6 +385,7 @@ impl App {
                 'a' => start_container(&self.client, &container.id).await,
                 'r' => restart_container(&self.client, &container.id).await,
                 'k' => remove_container(&self.client, &container.id).await,
+                'e' => self.input_mode = InputMode::Editing,
                 _ => {}
             }
         }
@@ -586,6 +610,58 @@ impl App {
 
         rx
     }
+
+    pub async fn execute_container_command(&mut self) {
+        if self.command_input.is_empty() {
+            self.input_mode = InputMode::Normal;
+            return;
+        }
+
+        if let Some(MenuItem::Containers) = self.menu.selected() {
+            if let Some(container) = self.containers.selected() {
+                let cmd: Vec<String> = self
+                    .command_input
+                    .split_whitespace()
+                    .map(|s| s.to_string())
+                    .collect();
+
+                let command_string = self.command_input.clone();
+
+                let exec_options = CreateExecOptions {
+                    cmd: Some(cmd),
+                    attach_stdout: Some(true),
+                    attach_stderr: Some(true),
+                    ..Default::default()
+                };
+
+                let client = self.client.clone();
+                let container_id = container.id.clone();
+                // Create a new channel for this execution
+                let (tx, rx) = unbounded_channel();
+                self.exec_log_rx = Some(rx);
+
+                // Add a marker in the logs
+                self.container_logs
+                    .push(format!(">>> Executing: {}", command_string));
+
+                tokio::spawn(async move {
+                    if let Ok(exec) = client.create_exec(&container_id, exec_options).await {
+                        if let Ok(StartExecResults::Attached { mut output, .. }) =
+                            client.start_exec(&exec.id, None).await
+                        {
+                            while let Some(Ok(msg)) = output.next().await {
+                                let _ = tx.send(msg.to_string());
+                            }
+                            let _ = tx.send(format!("<<< Finished: {}", command_string));
+                        }
+                    }
+                });
+            }
+        }
+
+        self.command_input.clear();
+        self.input_mode = InputMode::Normal;
+    }
 }
 
 impl Default for App {
@@ -622,6 +698,9 @@ impl Default for App {
             log_visible_height: 20,
             log_visible_width: 5,
             event_rx,
+            input_mode: InputMode::Normal,
+            command_input: String::new(),
+            exec_log_rx: None,
         }
     }
 }

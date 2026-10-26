@@ -1,6 +1,6 @@
 use crate::{
     container::models::DockerContainer,
-    tui::app::{App, ContainerTab, Focus, MenuItem},
+    tui::app::{App, ContainerTab, Focus, InputMode, MenuItem},
 };
 use ratatui::{
     Frame,
@@ -8,8 +8,8 @@ use ratatui::{
     style::{Color, Modifier, Style, Stylize},
     text::{Line, Span, Text},
     widgets::{
-        Block, BorderType, List, ListItem, ListState, Paragraph, Scrollbar, ScrollbarOrientation,
-        ScrollbarState, Tabs,
+        Block, BorderType, Clear, List, ListItem, ListState, Paragraph, Scrollbar,
+        ScrollbarOrientation, ScrollbarState, Tabs,
     },
 };
 
@@ -65,6 +65,32 @@ pub fn render(app: &mut App, frame: &mut Frame) {
 
     // ----------------- Right Details Pane -----------------
     render_content(app, panels[1], frame, app.focus == Focus::Content);
+
+    // ----------------- Popup -----------------
+    if app.input_mode == InputMode::Editing {
+        let area = centered_rect(50, 20, frame.area());
+
+        frame.render_widget(Clear, area);
+
+        let title = if let Some(container) = app.containers.selected() {
+            format!(" Exec in {} (Enter to run, Esc to cancel) ", container.name)
+        } else {
+            " Execute Command ".to_string()
+        };
+
+        let block = Block::bordered()
+            .title(title)
+            .border_type(BorderType::Thick)
+            .border_style(Style::default().fg(Color::Yellow));
+
+        let paragraph = Paragraph::new(app.command_input.as_str()).block(block);
+        frame.render_widget(paragraph, area);
+
+        frame.set_cursor_position(ratatui::layout::Position {
+            x: area.x + app.command_input.chars().count() as u16 + 1,
+            y: area.y + 1,
+        });
+    }
 }
 
 fn render_menu_tabs(app: &App, area: Rect, frame: &mut Frame) {
@@ -359,8 +385,30 @@ fn get_list_footer(selected_item: char) -> Line<'static> {
             footer.push_span(Span::styled(": restart  ", desc_style));
             footer.push_span(Span::styled("k", key_style));
             footer.push_span(Span::styled(": delete  ", desc_style));
+            footer.push_span(Span::styled("e", key_style));
+            footer.push_span(Span::styled(": exec  ", desc_style));
         }
         _ => {}
     }
     footer
+}
+
+fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
+    let popup_layout = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Percentage((100 - percent_y) / 2),
+            Constraint::Percentage(percent_y),
+            Constraint::Percentage((100 - percent_y) / 2),
+        ])
+        .split(r);
+
+    Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([
+            Constraint::Percentage((100 - percent_x) / 2),
+            Constraint::Percentage(percent_x),
+            Constraint::Percentage((100 - percent_x) / 2),
+        ])
+        .split(popup_layout[1])[1]
 }

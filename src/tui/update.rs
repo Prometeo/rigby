@@ -1,8 +1,31 @@
-use crate::tui::app::{App, Focus};
+use crate::tui::app::{App, Focus, InputMode};
 use color_eyre::{Report, Result};
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 pub async fn update(app: &mut App, key_event: KeyEvent) -> Result<(), Report> {
+    // Handle keystrokes for the text box if the popup is open
+    if app.input_mode == InputMode::Editing {
+        match key_event.code {
+            KeyCode::Enter => {
+                app.execute_container_command().await;
+            }
+            KeyCode::Char(c) => {
+                app.command_input.push(c);
+            }
+            KeyCode::Backspace => {
+                app.command_input.pop();
+            }
+            KeyCode::Esc => {
+                app.input_mode = InputMode::Normal;
+                app.command_input.clear();
+            }
+            _ => {}
+        }
+
+        return Ok(());
+    }
+
+    // Handle normal UI navigation if the popup is closed
     match key_event.code {
         KeyCode::Esc | KeyCode::Char('q') => {
             app.quit();
@@ -68,7 +91,7 @@ pub async fn update(app: &mut App, key_event: KeyEvent) -> Result<(), Report> {
             app.toggle_container_tab(c).await;
         }
 
-        KeyCode::Char(c @ ('s' | 'a' | 'r' | 'k')) => app.footer_action(c).await,
+        KeyCode::Char(c @ ('s' | 'a' | 'r' | 'k' | 'e')) => app.footer_action(c).await,
 
         KeyCode::Tab => {
             app.toggle_focus();
