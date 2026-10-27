@@ -34,7 +34,8 @@ use futures_util::StreamExt;
 use ratatui::widgets::ListState;
 use std::fmt;
 use tokio::sync::mpsc::{UnboundedReceiver, unbounded_channel};
-use tokio::task::AbortHandle;
+
+use crate::tui::components::logs::LogViewer;
 
 #[derive(PartialEq, Eq)]
 pub enum Focus {
@@ -92,44 +93,37 @@ impl<T> StatefullList<T> {
         K: Ord,
     {
         let selected_key = self.selected().map(&key_fn);
-
         new_items.sort_by_key(&key_fn);
         self.items = new_items;
 
-        // Restore selection
         if self.items.is_empty() {
             self.state.select(None);
             return;
         }
 
-        if let Some(target_key) = selected_key {
-            // Find where the previously selected item is now
-            if let Some(new_pos) = self
+        if let Some(target_key) = selected_key
+            && let Some(new_pos) = self
                 .items
                 .iter()
                 .position(|item| key_fn(item) == target_key)
-            {
-                self.state.select(Some(new_pos));
-                return;
-            }
+        {
+            self.state.select(Some(new_pos));
+            return;
         }
 
         let current_index = self.state.selected().unwrap_or(0);
         self.state
             .select(Some(current_index.min(self.items.len() - 1)));
     }
-
     pub fn select_first(&mut self) {
         if !self.items.is_empty() {
             self.state.select(Some(0));
         }
     }
-
     pub fn selected(&self) -> Option<&T> {
         let index: usize = self.state.selected()?;
         self.items.get(index)
     }
-
     pub fn move_up(&mut self) {
         if self.items.is_empty() {
             return;
@@ -137,7 +131,6 @@ impl<T> StatefullList<T> {
         let i: usize = self.state.selected().unwrap_or(0);
         self.state.select(Some(i.saturating_sub(1)));
     }
-
     pub fn move_down(&mut self) {
         if self.items.is_empty() {
             return;
@@ -182,27 +175,26 @@ pub enum InputMode {
 
 pub struct App {
     pub quit: bool,
-    pub menu: StatefullList<MenuItem>,
+    pub client: Docker,
     pub focus: Focus,
+
+    // UI State
+    pub menu: StatefullList<MenuItem>,
+    pub container_tab: ContainerTab,
+    pub details: Option<Details>,
+    pub input_mode: InputMode,
+    pub command_input: String,
+
+    // Resources
     pub containers: StatefullList<DockerContainer>,
     pub images: StatefullList<DockerImage>,
     pub networks: StatefullList<DockerNetwork>,
     pub volumes: StatefullList<DockerVolume>,
-    pub client: Docker,
-    pub details: Option<Details>,
-    pub container_tab: ContainerTab,
-    pub container_logs: Vec<String>,
-    pub log_rx: Option<UnboundedReceiver<String>>,
-    pub log_abort_handle: Option<AbortHandle>,
-    pub log_vertical_scroll: u16,
-    pub log_horizontal_scroll: u16,
-    pub log_auto_scroll: bool,
-    pub log_visible_height: u16,
-    pub log_visible_width: u16,
+
+    // Isolated Components
+    pub logs: LogViewer,
+
     pub event_rx: Option<UnboundedReceiver<DockerEventUpdate>>,
-    pub input_mode: InputMode,
-    pub command_input: String,
-    pub exec_log_rx: Option<UnboundedReceiver<String>>,
 }
 
 impl App {
@@ -211,32 +203,8 @@ impl App {
     }
 
     pub async fn tick(&mut self) -> Result<()> {
-        const MAX_LOG_LINES: usize = 5000;
+        self.logs.process_ticks();
 
-        // Read standard container logs
-        if let Some(rx) = self.log_rx.as_mut() {
-            while let Ok(line) = rx.try_recv() {
-                self.container_logs.push(line);
-            }
-        }
-
-        // Read execution logs
-        if let Some(rx) = self.exec_log_rx.as_mut() {
-            while let Ok(line) = rx.try_recv() {
-                for sub_line in line.lines() {
-                    self.container_logs.push(sub_line.to_string());
-                }
-            }
-        }
-
-        // Truncate logs if they get too long
-        if self.container_logs.len() > MAX_LOG_LINES {
-            let excess = self.container_logs.len() - MAX_LOG_LINES;
-            self.container_logs.drain(0..excess);
-            self.log_vertical_scroll = self.log_vertical_scroll.saturating_sub(excess as u16);
-        }
-
-        // Handle Docker eventsñ
         let mut pending_updates = Vec::new();
         if let Some(rx) = self.event_rx.as_mut() {
             while let Ok(update) = rx.try_recv() {
@@ -245,7 +213,6 @@ impl App {
         }
 
         let mut reload_details = false;
-
         for update in pending_updates {
             match update {
                 DockerEventUpdate::Containers(conts) => {
@@ -280,89 +247,23 @@ impl App {
         if reload_details {
             self.load_selected_details().await;
         }
-
         Ok(())
     }
 
-    pub fn logs_scroll_up(&mut self) {
-        let total_lines = self.container_logs.len() as u16;
-        let max_scroll = total_lines.saturating_sub(self.log_visible_height);
-
-        if self.log_auto_scroll {
-            self.log_auto_scroll = false;
-            self.log_vertical_scroll = max_scroll.saturating_sub(1);
-        } else {
-            self.log_vertical_scroll = self.log_vertical_scroll.saturating_sub(1);
-        }
-    }
-
-    pub fn logs_scroll_logs_down(&mut self) {
-        let total_lines = self.container_logs.len() as u16;
-        let max_scroll = total_lines.saturating_sub(self.log_visible_height);
-
-        self.log_vertical_scroll = self.log_vertical_scroll.saturating_add(1);
-
-        if self.log_vertical_scroll >= max_scroll {
-            self.log_auto_scroll = true;
-        }
-    }
-
-    pub fn vertical_logs_scroll_to_top(&mut self) {
-        self.log_auto_scroll = false;
-        self.log_vertical_scroll = 0;
-    }
-
-    pub fn vertical_logs_scroll_bottom(&mut self) {
-        self.log_auto_scroll = true;
-        let total_lines = self.container_logs.len() as u16;
-        self.log_vertical_scroll = total_lines.saturating_sub(self.log_visible_height);
-    }
-
-    fn max_horizontal_scroll(&self) -> u16 {
-        let max_line_width = self
-            .container_logs
-            .iter()
-            .map(|l| l.chars().count())
-            .max()
-            .unwrap_or(0) as u16;
-
-        max_line_width.saturating_sub(self.log_visible_width)
-    }
-
-    pub fn horizontal_logs_scroll_left(&mut self) {
-        self.log_horizontal_scroll = self.log_horizontal_scroll.saturating_sub(4);
-    }
-
-    pub fn horizontal_logs_scroll_right(&mut self) {
-        let max_scroll = self.max_horizontal_scroll();
-        self.log_horizontal_scroll = (self.log_horizontal_scroll + 4).min(max_scroll);
-    }
-
-    pub fn horizontal_logs_scroll_to_start(&mut self) {
-        self.log_horizontal_scroll = 0;
-    }
-
-    pub fn horizontal_logs_scroll_to_end(&mut self) {
-        self.log_horizontal_scroll = self.max_horizontal_scroll();
-    }
-
     pub fn start_logs_stream(&mut self) {
-        self.stop_logs_stream();
-        self.container_logs.clear();
-        self.log_horizontal_scroll = 0;
+        self.logs.stop_stream();
+        self.logs.lines.clear();
+        self.logs.horizontal_scroll = 0;
 
         if let Some(container) = self.containers.selected() {
             let (rx, handle) = get_container_logs(self.client.clone(), container.id.clone(), 100);
-            self.log_rx = Some(rx);
-            self.log_abort_handle = Some(handle);
+            self.logs.rx = Some(rx);
+            self.logs.abort_handle = Some(handle);
         }
     }
 
     pub fn stop_logs_stream(&mut self) {
-        if let Some(handle) = self.log_abort_handle.take() {
-            handle.abort();
-        }
-        self.log_rx = None;
+        self.logs.stop_stream();
     }
 
     pub fn toggle_focus(&mut self) {
@@ -463,7 +364,6 @@ impl App {
                 self.images.select_first();
                 self.load_selected_details().await;
             }
-
             Some(MenuItem::Containers) => {
                 self.stop_logs_stream();
                 if self.containers.items.is_empty() {
@@ -474,7 +374,6 @@ impl App {
                 self.containers.select_first();
                 self.load_selected_details().await;
             }
-
             Some(MenuItem::Volumes) => {
                 self.stop_logs_stream();
                 if self.volumes.items.is_empty() {
@@ -484,7 +383,6 @@ impl App {
                 self.volumes.select_first();
                 self.load_selected_details().await;
             }
-
             Some(MenuItem::Networks) => {
                 self.stop_logs_stream();
                 if self.networks.items.is_empty() {
@@ -494,7 +392,6 @@ impl App {
                 self.networks.select_first();
                 self.load_selected_details().await;
             }
-
             None => {}
         }
     }
@@ -506,45 +403,37 @@ impl App {
                     self.details = None;
                     return;
                 };
-
                 if let Ok(details) = inspect_image(&self.client, &image).await {
                     self.details = Some(Details::Image(details))
                 };
             }
-
             Some(MenuItem::Containers) => {
                 let Some(container) = self.containers.selected().cloned() else {
                     self.details = None;
                     return;
                 };
-
                 if let Ok(details) = inspect_container(&self.client, &container).await {
                     self.details = Some(Details::Container(details))
                 }
             }
-
             Some(MenuItem::Volumes) => {
                 let Some(volume) = self.volumes.selected().cloned() else {
                     self.details = None;
                     return;
                 };
-
                 if let Ok(details) = inspect_volume(&self.client, &volume).await {
                     self.details = Some(Details::Volume(details))
                 }
             }
-
             Some(MenuItem::Networks) => {
                 let Some(network) = self.networks.selected().cloned() else {
                     self.details = None;
                     return;
                 };
-
                 if let Ok(details) = inspect_network(&self.client, &network).await {
                     self.details = Some(Details::Network(details))
                 }
             }
-
             None => {}
         };
     }
@@ -558,12 +447,10 @@ impl App {
                     self.stop_logs_stream();
                     ContainerTab::Details
                 }
-
                 'l' if self.container_tab != ContainerTab::Logs => {
                     self.start_logs_stream();
                     ContainerTab::Logs
                 }
-
                 _ => return,
             };
         }
@@ -575,13 +462,10 @@ impl App {
 
     pub fn spawn_docker_event_listener(client: Docker) -> UnboundedReceiver<DockerEventUpdate> {
         let (tx, rx) = unbounded_channel();
-
         tokio::spawn(async move {
             let mut event_stream = client.events(None);
-
             while let Some(event_result) = event_stream.next().await {
                 let Ok(event) = event_result else { continue };
-
                 match event.typ {
                     Some(EventMessageTypeEnum::CONTAINER) => {
                         if let Ok(containers) = list_containers(&client).await {
@@ -607,7 +491,6 @@ impl App {
                 }
             }
         });
-
         rx
     }
 
@@ -625,7 +508,6 @@ impl App {
                 .split_whitespace()
                 .map(|s| s.to_string())
                 .collect();
-
             let command_string = self.command_input.clone();
 
             let exec_options = CreateExecOptions {
@@ -634,15 +516,13 @@ impl App {
                 attach_stderr: Some(true),
                 ..Default::default()
             };
-
             let client = self.client.clone();
             let container_id = container.id.clone();
-            // Create a new channel for this execution
-            let (tx, rx) = unbounded_channel();
-            self.exec_log_rx = Some(rx);
 
-            // Add a marker in the logs
-            self.container_logs
+            let (tx, rx) = unbounded_channel();
+            self.logs.exec_rx = Some(rx);
+            self.logs
+                .lines
                 .push(format!(">>> Executing: {}", command_string));
 
             tokio::spawn(async move {
@@ -657,7 +537,6 @@ impl App {
                 }
             });
         }
-
         self.command_input.clear();
         self.input_mode = InputMode::Normal;
     }
@@ -675,8 +554,8 @@ impl Default for App {
             MenuItem::Volumes,
             MenuItem::Networks,
         ];
-
         let event_rx = Some(Self::spawn_docker_event_listener(client.clone()));
+
         Self {
             quit: false,
             menu,
@@ -688,18 +567,10 @@ impl Default for App {
             client,
             details: None,
             container_tab: ContainerTab::Details,
-            container_logs: vec![String::default()],
-            log_rx: None,
-            log_abort_handle: None,
-            log_vertical_scroll: 0,
-            log_horizontal_scroll: 0,
-            log_auto_scroll: true,
-            log_visible_height: 20,
-            log_visible_width: 5,
+            logs: LogViewer::new(),
             event_rx,
             input_mode: InputMode::Normal,
             command_input: String::new(),
-            exec_log_rx: None,
         }
     }
 }

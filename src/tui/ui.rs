@@ -281,7 +281,7 @@ fn render_detail_tabs(app: &App, frame: &mut Frame, area: Rect) {
 }
 
 fn render_logs(app: &mut App, focused: bool, frame: &mut Frame, area: Rect) {
-    if app.container_logs.is_empty() {
+    if app.logs.lines.is_empty() {
         let paragraph =
             Paragraph::new(Text::from("No logs available")).block(styled_block(" Logs ", focused));
         frame.render_widget(paragraph, area);
@@ -290,32 +290,28 @@ fn render_logs(app: &mut App, focused: bool, frame: &mut Frame, area: Rect) {
 
     let visible_height = area.height.saturating_sub(2);
     let visible_width = area.width.saturating_sub(2);
-    app.log_visible_height = visible_height;
-    app.log_visible_width = visible_width;
+    app.logs.visible_height = visible_height;
+    app.logs.visible_width = visible_width;
 
     // Calculate Vertical Bounds
-    let total_lines = app.container_logs.len();
+    let total_lines = app.logs.lines.len();
     let max_vertical_scroll = total_lines.saturating_sub(visible_height as usize);
 
-    let vertical_scroll = if app.log_auto_scroll {
+    let vertical_scroll = if app.logs.auto_scroll {
         max_vertical_scroll as u16
     } else {
-        app.log_vertical_scroll.min(max_vertical_scroll as u16)
+        app.logs.vertical_scroll.min(max_vertical_scroll as u16)
     };
 
     // Calculate Horizontal Bounds
-    let max_line_width = app
-        .container_logs
-        .iter()
-        .map(|l| l.len())
-        .max()
-        .unwrap_or(0);
+    let max_line_width = app.logs.lines.iter().map(|l| l.len()).max().unwrap_or(0);
     let max_horizontal_scroll = max_line_width.saturating_sub(visible_width as usize) as u16;
-    let horizontal_scroll = app.log_horizontal_scroll.min(max_horizontal_scroll);
+    let horizontal_scroll = app.logs.horizontal_scroll.min(max_horizontal_scroll);
 
     // Prepare All Styled Lines
     let lines: Vec<Line> = app
-        .container_logs
+        .logs
+        .lines
         .iter()
         .map(|log| {
             if log.starts_with("[ERR]") {
@@ -326,7 +322,7 @@ fn render_logs(app: &mut App, focused: bool, frame: &mut Frame, area: Rect) {
         })
         .collect();
 
-    let title = if app.log_auto_scroll {
+    let title = if app.logs.auto_scroll {
         " Logs [FOLLOWING - Press Up to pause] "
     } else {
         " Logs [PAUSED - Press 'G' to resume follow] "

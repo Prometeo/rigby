@@ -44,7 +44,7 @@ pub async fn update(app: &mut App, key_event: KeyEvent) -> Result<(), Report> {
                 app.move_items_list_up().await;
             }
             Focus::Content => {
-                app.logs_scroll_up();
+                app.logs.scroll_up();
             }
         },
 
@@ -53,38 +53,38 @@ pub async fn update(app: &mut App, key_event: KeyEvent) -> Result<(), Report> {
                 app.move_items_list_down().await;
             }
             Focus::Content => {
-                app.logs_scroll_logs_down();
+                app.logs.scroll_down();
             }
         },
 
         KeyCode::Char('g') => match app.focus {
             Focus::Content => {
-                app.vertical_logs_scroll_to_top();
+                app.logs.scroll_to_top();
             }
             Focus::ItemsList => {}
         },
 
         KeyCode::Char('G') => match app.focus {
             Focus::Content => {
-                app.vertical_logs_scroll_bottom();
+                app.logs.scroll_to_bottom();
             }
             Focus::ItemsList => {}
         },
 
         KeyCode::Left if key_event.modifiers == KeyModifiers::CONTROL => {
-            app.horizontal_logs_scroll_to_start();
+            app.logs.scroll_to_start();
         }
 
         KeyCode::Left => {
-            app.horizontal_logs_scroll_left();
+            app.logs.scroll_left();
         }
 
         KeyCode::Right if key_event.modifiers == KeyModifiers::CONTROL => {
-            app.horizontal_logs_scroll_to_end();
+            app.logs.scroll_to_end();
         }
 
         KeyCode::Right => {
-            app.horizontal_logs_scroll_right();
+            app.logs.scroll_right();
         }
 
         KeyCode::Char(c @ ('d' | 'l')) => {
