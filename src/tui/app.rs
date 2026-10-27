@@ -617,46 +617,45 @@ impl App {
             return;
         }
 
-        if let Some(MenuItem::Containers) = self.menu.selected() {
-            if let Some(container) = self.containers.selected() {
-                let cmd: Vec<String> = self
-                    .command_input
-                    .split_whitespace()
-                    .map(|s| s.to_string())
-                    .collect();
+        if let Some(MenuItem::Containers) = self.menu.selected()
+            && let Some(container) = self.containers.selected()
+        {
+            let cmd: Vec<String> = self
+                .command_input
+                .split_whitespace()
+                .map(|s| s.to_string())
+                .collect();
 
-                let command_string = self.command_input.clone();
+            let command_string = self.command_input.clone();
 
-                let exec_options = CreateExecOptions {
-                    cmd: Some(cmd),
-                    attach_stdout: Some(true),
-                    attach_stderr: Some(true),
-                    ..Default::default()
-                };
+            let exec_options = CreateExecOptions {
+                cmd: Some(cmd),
+                attach_stdout: Some(true),
+                attach_stderr: Some(true),
+                ..Default::default()
+            };
 
-                let client = self.client.clone();
-                let container_id = container.id.clone();
-                // Create a new channel for this execution
-                let (tx, rx) = unbounded_channel();
-                self.exec_log_rx = Some(rx);
+            let client = self.client.clone();
+            let container_id = container.id.clone();
+            // Create a new channel for this execution
+            let (tx, rx) = unbounded_channel();
+            self.exec_log_rx = Some(rx);
 
-                // Add a marker in the logs
-                self.container_logs
-                    .push(format!(">>> Executing: {}", command_string));
+            // Add a marker in the logs
+            self.container_logs
+                .push(format!(">>> Executing: {}", command_string));
 
-                tokio::spawn(async move {
-                    if let Ok(exec) = client.create_exec(&container_id, exec_options).await {
-                        if let Ok(StartExecResults::Attached { mut output, .. }) =
-                            client.start_exec(&exec.id, None).await
-                        {
-                            while let Some(Ok(msg)) = output.next().await {
-                                let _ = tx.send(msg.to_string());
-                            }
-                            let _ = tx.send(format!("<<< Finished: {}", command_string));
-                        }
+            tokio::spawn(async move {
+                if let Ok(exec) = client.create_exec(&container_id, exec_options).await
+                    && let Ok(StartExecResults::Attached { mut output, .. }) =
+                        client.start_exec(&exec.id, None).await
+                {
+                    while let Some(Ok(msg)) = output.next().await {
+                        let _ = tx.send(msg.to_string());
                     }
-                });
-            }
+                    let _ = tx.send(format!("<<< Finished: {}", command_string));
+                }
+            });
         }
 
         self.command_input.clear();
