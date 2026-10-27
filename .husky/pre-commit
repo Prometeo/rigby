@@ -1,0 +1,7 @@
+#!/bin/sh
+
+echo "Running formatting checks..."
+cargo fmt --all -- --check || { echo "Formatting failed."; exit 1; }
+
+echo "Running clippy..."
+cargo clippy -- -D warnings || { echo "Clippy failed."; exit 1; }
