@@ -1,7 +1,6 @@
-use crate::{
-    container::models::DockerContainer,
-    tui::app::{App, ContainerTab, Focus, InputMode, MenuItem},
-};
+use crate::{container::models::DockerContainer, tui::app::App};
+
+use crate::tui::components::{ContainerTab, Focus, MenuItem};
 use ratatui::{
     Frame,
     layout::{Constraint, Direction, Layout, Rect},
@@ -30,9 +29,9 @@ pub fn render(app: &mut App, frame: &mut Frame) {
 
     // ----------------- Middle Items List -----------------
     let items_area = panels[0];
-    let list_focused = app.focus == Focus::ItemsList;
+    let list_focused = app.ui.focus == Focus::ItemsList;
 
-    match app.menu.selected() {
+    match app.ui.menu.selected() {
         Some(MenuItem::Containers) => {
             CustomList::with_renderer(
                 &app.resources.containers.items,
@@ -48,57 +47,63 @@ pub fn render(app: &mut App, frame: &mut Frame) {
                 .focused(list_focused)
                 .footer(get_list_footer('i'))
                 .render(frame, items_area, &mut app.resources.images.state);
-            app.container_tab = ContainerTab::Details;
+            app.ui.container_tab = ContainerTab::Details;
         }
         Some(MenuItem::Networks) => {
             CustomList::new(&app.resources.networks.items, "Networks")
                 .focused(list_focused)
                 .footer(get_list_footer('n'))
                 .render(frame, items_area, &mut app.resources.networks.state);
-            app.container_tab = ContainerTab::Details;
+            app.ui.container_tab = ContainerTab::Details;
         }
         Some(MenuItem::Volumes) => {
             CustomList::new(&app.resources.volumes.items, "Volumes")
                 .focused(list_focused)
                 .footer(get_list_footer('v'))
                 .render(frame, items_area, &mut app.resources.volumes.state);
-            app.container_tab = ContainerTab::Details;
+            app.ui.container_tab = ContainerTab::Details;
         }
         None => {}
     }
 
     // ----------------- Right Details Pane -----------------
-    render_content(app, panels[1], frame, app.focus == Focus::Content);
+    render_content(app, panels[1], frame, app.ui.focus == Focus::Content);
 
     // ----------------- Popup -----------------
-    if app.input_mode == InputMode::Editing {
-        let area = centered_rect(50, 20, frame.area());
+    render_popup(app, frame);
+}
 
-        frame.render_widget(Clear, area);
-
-        let title = if let Some(container) = app.resources.containers.selected() {
-            format!(" Exec in {} (Enter to run, Esc to cancel) ", container.name)
-        } else {
-            " Execute Command ".to_string()
-        };
-
-        let block = Block::bordered()
-            .title(title)
-            .border_type(BorderType::Thick)
-            .border_style(Style::default().fg(Color::Yellow));
-
-        let paragraph = Paragraph::new(app.command_input.as_str()).block(block);
-        frame.render_widget(paragraph, area);
-
-        frame.set_cursor_position(ratatui::layout::Position {
-            x: area.x + app.command_input.chars().count() as u16 + 1,
-            y: area.y + 1,
-        });
+fn render_popup(app: &App, frame: &mut Frame) {
+    if !app.popup.is_editing() {
+        return;
     }
+
+    let area = centered_rect(30, 3, frame.area());
+    frame.render_widget(Clear, area);
+
+    let title = if let Some(container) = app.resources.containers.selected() {
+        format!(" Exec in {} (Enter to run, Esc to cancel) ", container.name)
+    } else {
+        " Execute Command ".to_string()
+    };
+
+    let block = Block::bordered()
+        .title(title)
+        .border_type(BorderType::Thick)
+        .border_style(Style::default().fg(Color::Yellow));
+
+    let paragraph = Paragraph::new(app.popup.text.as_str()).block(block);
+    frame.render_widget(paragraph, area);
+
+    frame.set_cursor_position(ratatui::layout::Position {
+        x: area.x + app.popup.text.chars().count() as u16 + 1,
+        y: area.y + 1,
+    });
 }
 
 fn render_menu_tabs(app: &App, area: Rect, frame: &mut Frame) {
     let titles: Vec<Line> = app
+        .ui
         .menu
         .items
         .iter()
@@ -115,7 +120,7 @@ fn render_menu_tabs(app: &App, area: Rect, frame: &mut Frame) {
         })
         .collect();
 
-    let selected_index = app.menu.state.selected().unwrap_or(0);
+    let selected_index = app.ui.menu.state.selected().unwrap_or(0);
 
     let block = Block::bordered()
         .title("Menu")
@@ -225,9 +230,10 @@ fn render_content(app: &mut App, area: Rect, frame: &mut Frame, focused: bool) {
 
     let content_area = rows[1];
 
-    match app.container_tab {
+    match app.ui.container_tab {
         ContainerTab::Details => {
             let details = app
+                .ui
                 .details
                 .as_ref()
                 .map(ToString::to_string)
@@ -262,11 +268,11 @@ fn render_container_item(container: &DockerContainer) -> ListItem<'static> {
 
 fn render_detail_tabs(app: &App, frame: &mut Frame, area: Rect) {
     let mut tab_titles = vec![Line::from(" Details ")];
-    if matches!(app.menu.selected(), Some(MenuItem::Containers)) {
+    if matches!(app.ui.menu.selected(), Some(MenuItem::Containers)) {
         tab_titles.push(Line::from(" Logs "));
     };
 
-    let selected_tab = match app.container_tab {
+    let selected_tab = match app.ui.container_tab {
         ContainerTab::Details => 0,
         ContainerTab::Logs => 1,
     };

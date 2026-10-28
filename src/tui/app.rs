@@ -1,25 +1,22 @@
 use crate::utils::driver_connector;
-use crate::volume::{
-    models::{DockerVolume, DockerVolumeDetail},
-    service::list_volumes,
-};
+use crate::volume::{models::DockerVolume, service::list_volumes};
 use crate::{
     container::service::remove_container,
     image::{
-        models::{DockerImage, DockerImageDetail},
+        models::DockerImage,
         service::{inspect_image, list_images},
     },
 };
 use crate::{
     container::service::restart_container,
     networking::{
-        models::{DockerNetwork, DockerNetworkDetail},
+        models::DockerNetwork,
         service::{inspect_network, list_networks},
     },
 };
 use crate::{
     container::{
-        models::{DockerContainer, DockerContainerDetail},
+        models::DockerContainer,
         service::{
             get_container_logs, inspect_container, list_containers, start_container, stop_container,
         },
@@ -31,55 +28,11 @@ use bollard::exec::{CreateExecOptions, StartExecResults};
 use bollard::models::EventMessageTypeEnum;
 use color_eyre::Result;
 use futures_util::StreamExt;
-use std::fmt;
 use tokio::sync::mpsc::{UnboundedReceiver, unbounded_channel};
 
-use crate::tui::components::StatefullList;
-use crate::tui::components::logs::LogViewer;
-use crate::tui::components::resources::DockerResources;
-
-#[derive(PartialEq, Eq)]
-pub enum Focus {
-    ItemsList,
-    Content,
-}
-
-#[derive(Debug, Clone)]
-pub enum MenuItem {
-    Images,
-    Containers,
-    Volumes,
-    Networks,
-}
-
-impl fmt::Display for MenuItem {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            MenuItem::Images => write!(f, "Images"),
-            MenuItem::Containers => write!(f, "Containers"),
-            MenuItem::Volumes => write!(f, "Volumes"),
-            MenuItem::Networks => write!(f, "Networks"),
-        }
-    }
-}
-
-pub enum Details {
-    Image(DockerImageDetail),
-    Container(DockerContainerDetail),
-    Volume(DockerVolumeDetail),
-    Network(DockerNetworkDetail),
-}
-
-impl fmt::Display for Details {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Details::Image(details) => write!(f, "{details}"),
-            Details::Container(details) => write!(f, "{details}"),
-            Details::Network(details) => write!(f, "{details}"),
-            Details::Volume(details) => write!(f, "{details}"),
-        }
-    }
-}
+use crate::tui::components::{
+    CommandPopup, ContainerTab, Details, DockerResources, Focus, LogViewer, MenuItem, UiState,
+};
 
 pub enum DockerEventUpdate {
     Containers(Vec<DockerContainer>),
@@ -88,38 +41,13 @@ pub enum DockerEventUpdate {
     Networks(Vec<DockerNetwork>),
 }
 
-#[derive(Default, PartialEq, Eq, Clone)]
-pub enum ContainerTab {
-    #[default]
-    Details,
-    Logs,
-}
-
-#[derive(Default, PartialEq, Eq, Clone)]
-pub enum InputMode {
-    #[default]
-    Normal,
-    Editing,
-}
-
 pub struct App {
     pub quit: bool,
     pub client: Docker,
-    pub focus: Focus,
-
-    // UI State
-    pub menu: StatefullList<MenuItem>,
-    pub container_tab: ContainerTab,
-    pub details: Option<Details>,
-    pub input_mode: InputMode,
-    pub command_input: String,
-
-    // Resources
+    pub ui: UiState,
+    pub popup: CommandPopup,
     pub resources: DockerResources,
-
-    // Isolated Components
     pub logs: LogViewer,
-
     pub event_rx: Option<UnboundedReceiver<DockerEventUpdate>>,
 }
 
@@ -145,15 +73,15 @@ impl App {
                     self.resources
                         .containers
                         .update_items(conts, |c| c.id.clone());
-                    if let Some(MenuItem::Containers) = self.menu.selected()
-                        && self.container_tab == ContainerTab::Details
+                    if let Some(MenuItem::Containers) = self.ui.menu.selected()
+                        && self.ui.container_tab == ContainerTab::Details
                     {
                         reload_details = true;
                     }
                 }
                 DockerEventUpdate::Images(imgs) => {
                     self.resources.images.update_items(imgs, |i| i.id.clone());
-                    if let Some(MenuItem::Images) = self.menu.selected() {
+                    if let Some(MenuItem::Images) = self.ui.menu.selected() {
                         reload_details = true;
                     }
                 }
@@ -161,7 +89,7 @@ impl App {
                     self.resources
                         .volumes
                         .update_items(vols, |v| v.name.clone());
-                    if let Some(MenuItem::Volumes) = self.menu.selected() {
+                    if let Some(MenuItem::Volumes) = self.ui.menu.selected() {
                         reload_details = true;
                     }
                 }
@@ -169,7 +97,7 @@ impl App {
                     self.resources
                         .networks
                         .update_items(nets, |n| n.name.clone());
-                    if let Some(MenuItem::Networks) = self.menu.selected() {
+                    if let Some(MenuItem::Networks) = self.ui.menu.selected() {
                         reload_details = true;
                     }
                 }
@@ -198,19 +126,12 @@ impl App {
         self.logs.stop_stream();
     }
 
-    pub fn toggle_focus(&mut self) {
-        self.focus = match self.focus {
-            Focus::ItemsList => Focus::Content,
-            Focus::Content => Focus::ItemsList,
-        }
-    }
-
     pub async fn menu_data_loaded(&mut self) {
         self.load_selected().await
     }
 
     pub async fn footer_action(&mut self, action: char) {
-        if let Some(MenuItem::Containers) = self.menu.selected()
+        if let Some(MenuItem::Containers) = self.ui.menu.selected()
             && let Some(container) = self.resources.containers.selected()
         {
             match action {
@@ -218,21 +139,21 @@ impl App {
                 'a' => start_container(&self.client, &container.id).await,
                 'r' => restart_container(&self.client, &container.id).await,
                 'k' => remove_container(&self.client, &container.id).await,
-                'e' => self.input_mode = InputMode::Editing,
+                'e' => self.popup.open(),
                 _ => {}
             }
         }
     }
 
     pub async fn move_items_list_up(&mut self) {
-        match self.menu.selected() {
+        match self.ui.menu.selected() {
             Some(MenuItem::Images) => {
                 self.resources.images.move_up();
                 self.load_selected_details().await;
             }
             Some(MenuItem::Containers) => {
                 self.resources.containers.move_up();
-                match self.container_tab {
+                match self.ui.container_tab {
                     ContainerTab::Logs => self.start_logs_stream(),
                     ContainerTab::Details => self.load_selected_details().await,
                 }
@@ -250,14 +171,14 @@ impl App {
     }
 
     pub async fn move_items_list_down(&mut self) {
-        match self.menu.selected() {
+        match self.ui.menu.selected() {
             Some(MenuItem::Images) => {
                 self.resources.images.move_down();
                 self.load_selected_details().await;
             }
             Some(MenuItem::Containers) => {
                 self.resources.containers.move_down();
-                match self.container_tab {
+                match self.ui.container_tab {
                     ContainerTab::Logs => self.start_logs_stream(),
                     ContainerTab::Details => self.load_selected_details().await,
                 }
@@ -276,17 +197,17 @@ impl App {
 
     pub async fn select_menu_item(&mut self, option: char) {
         match option {
-            '1' => self.menu.state.select(Some(0)),
-            '2' => self.menu.state.select(Some(1)),
-            '3' => self.menu.state.select(Some(2)),
-            '4' => self.menu.state.select(Some(3)),
+            '1' => self.ui.menu.state.select(Some(0)),
+            '2' => self.ui.menu.state.select(Some(1)),
+            '3' => self.ui.menu.state.select(Some(2)),
+            '4' => self.ui.menu.state.select(Some(3)),
             _ => {}
         }
         self.load_selected().await;
     }
 
     pub async fn load_selected(&mut self) {
-        match self.menu.selected() {
+        match self.ui.menu.selected() {
             Some(MenuItem::Images) => {
                 self.stop_logs_stream();
                 if self.resources.images.items.is_empty() {
@@ -304,7 +225,7 @@ impl App {
                         .containers
                         .update_items(containers, |c| c.id.clone());
                 }
-                self.container_tab = ContainerTab::Details;
+                self.ui.container_tab = ContainerTab::Details;
                 self.resources.containers.select_first();
                 self.load_selected_details().await;
             }
@@ -335,41 +256,41 @@ impl App {
     }
 
     pub async fn load_selected_details(&mut self) {
-        match self.menu.selected() {
+        match self.ui.menu.selected() {
             Some(MenuItem::Images) => {
                 let Some(image) = self.resources.images.selected().cloned() else {
-                    self.details = None;
+                    self.ui.details = None;
                     return;
                 };
                 if let Ok(details) = inspect_image(&self.client, &image).await {
-                    self.details = Some(Details::Image(details))
+                    self.ui.details = Some(Details::Image(details))
                 };
             }
             Some(MenuItem::Containers) => {
                 let Some(container) = self.resources.containers.selected().cloned() else {
-                    self.details = None;
+                    self.ui.details = None;
                     return;
                 };
                 if let Ok(details) = inspect_container(&self.client, &container).await {
-                    self.details = Some(Details::Container(details))
+                    self.ui.details = Some(Details::Container(details))
                 }
             }
             Some(MenuItem::Volumes) => {
                 let Some(volume) = self.resources.volumes.selected().cloned() else {
-                    self.details = None;
+                    self.ui.details = None;
                     return;
                 };
                 if let Ok(details) = inspect_volume(&self.client, &volume).await {
-                    self.details = Some(Details::Volume(details))
+                    self.ui.details = Some(Details::Volume(details))
                 }
             }
             Some(MenuItem::Networks) => {
                 let Some(network) = self.resources.networks.selected().cloned() else {
-                    self.details = None;
+                    self.ui.details = None;
                     return;
                 };
                 if let Ok(details) = inspect_network(&self.client, &network).await {
-                    self.details = Some(Details::Network(details))
+                    self.ui.details = Some(Details::Network(details))
                 }
             }
             None => {}
@@ -377,15 +298,15 @@ impl App {
     }
 
     pub async fn toggle_container_tab(&mut self, tab: char) {
-        if let Some(MenuItem::Containers) = self.menu.selected()
-            && (self.focus == Focus::Content)
+        if let Some(MenuItem::Containers) = self.ui.menu.selected()
+            && (self.ui.focus == Focus::Content)
         {
-            self.container_tab = match tab {
-                'd' if self.container_tab != ContainerTab::Details => {
+            self.ui.container_tab = match tab {
+                'd' if self.ui.container_tab != ContainerTab::Details => {
                     self.stop_logs_stream();
                     ContainerTab::Details
                 }
-                'l' if self.container_tab != ContainerTab::Logs => {
+                'l' if self.ui.container_tab != ContainerTab::Logs => {
                     self.start_logs_stream();
                     ContainerTab::Logs
                 }
@@ -433,20 +354,21 @@ impl App {
     }
 
     pub async fn execute_container_command(&mut self) {
-        if self.command_input.is_empty() {
-            self.input_mode = InputMode::Normal;
+        if self.popup.text.is_empty() {
+            self.popup.close_and_clear();
             return;
         }
 
-        if let Some(MenuItem::Containers) = self.menu.selected()
+        if let Some(MenuItem::Containers) = self.ui.menu.selected()
             && let Some(container) = self.resources.containers.selected()
         {
             let cmd: Vec<String> = self
-                .command_input
+                .popup
+                .text
                 .split_whitespace()
                 .map(|s| s.to_string())
                 .collect();
-            let command_string = self.command_input.clone();
+            let command_string = self.popup.text.clone();
 
             let exec_options = CreateExecOptions {
                 cmd: Some(cmd),
@@ -475,37 +397,23 @@ impl App {
                 }
             });
         }
-        self.command_input.clear();
-        self.input_mode = InputMode::Normal;
+        self.popup.close_and_clear();
     }
 }
 
 impl Default for App {
     fn default() -> Self {
-        let mut menu: StatefullList<MenuItem> = StatefullList::default();
-        let client = driver_connector()
-            .expect("Failed to connect to the Docker daemon. Is the docker daemon runing?");
-
-        menu.items = vec![
-            MenuItem::Images,
-            MenuItem::Containers,
-            MenuItem::Volumes,
-            MenuItem::Networks,
-        ];
+        let client = driver_connector().expect("Failed to connect to the Docker daemon.");
         let event_rx = Some(Self::spawn_docker_event_listener(client.clone()));
 
         Self {
             quit: false,
-            menu,
-            focus: Focus::ItemsList,
-            resources: DockerResources::new(),
             client,
-            details: None,
-            container_tab: ContainerTab::Details,
-            logs: LogViewer::new(),
             event_rx,
-            input_mode: InputMode::Normal,
-            command_input: String::new(),
+            ui: UiState::new(),
+            popup: CommandPopup::new(),
+            resources: DockerResources::new(),
+            logs: LogViewer::new(),
         }
     }
 }
