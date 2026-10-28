@@ -34,8 +34,9 @@ use futures_util::StreamExt;
 use std::fmt;
 use tokio::sync::mpsc::{UnboundedReceiver, unbounded_channel};
 
+use crate::tui::components::StatefullList;
 use crate::tui::components::logs::LogViewer;
-use crate::tui::components::resources::{DockerResources, StatefullList};
+use crate::tui::components::resources::DockerResources;
 
 #[derive(PartialEq, Eq)]
 pub enum Focus {
