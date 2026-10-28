@@ -34,30 +34,34 @@ pub fn render(app: &mut App, frame: &mut Frame) {
 
     match app.menu.selected() {
         Some(MenuItem::Containers) => {
-            CustomList::with_renderer(&app.containers.items, "Containers", render_container_item)
-                .focused(list_focused)
-                .footer(get_list_footer('c'))
-                .render(frame, items_area, &mut app.containers.state);
+            CustomList::with_renderer(
+                &app.resources.containers.items,
+                "Containers",
+                render_container_item,
+            )
+            .focused(list_focused)
+            .footer(get_list_footer('c'))
+            .render(frame, items_area, &mut app.resources.containers.state);
         }
         Some(MenuItem::Images) => {
-            CustomList::new(&app.images.items, "Images")
+            CustomList::new(&app.resources.images.items, "Images")
                 .focused(list_focused)
                 .footer(get_list_footer('i'))
-                .render(frame, items_area, &mut app.images.state);
+                .render(frame, items_area, &mut app.resources.images.state);
             app.container_tab = ContainerTab::Details;
         }
         Some(MenuItem::Networks) => {
-            CustomList::new(&app.networks.items, "Networks")
+            CustomList::new(&app.resources.networks.items, "Networks")
                 .focused(list_focused)
                 .footer(get_list_footer('n'))
-                .render(frame, items_area, &mut app.networks.state);
+                .render(frame, items_area, &mut app.resources.networks.state);
             app.container_tab = ContainerTab::Details;
         }
         Some(MenuItem::Volumes) => {
-            CustomList::new(&app.volumes.items, "Volumes")
+            CustomList::new(&app.resources.volumes.items, "Volumes")
                 .focused(list_focused)
                 .footer(get_list_footer('v'))
-                .render(frame, items_area, &mut app.volumes.state);
+                .render(frame, items_area, &mut app.resources.volumes.state);
             app.container_tab = ContainerTab::Details;
         }
         None => {}
@@ -72,7 +76,7 @@ pub fn render(app: &mut App, frame: &mut Frame) {
 
         frame.render_widget(Clear, area);
 
-        let title = if let Some(container) = app.containers.selected() {
+        let title = if let Some(container) = app.resources.containers.selected() {
             format!(" Exec in {} (Enter to run, Esc to cancel) ", container.name)
         } else {
             " Execute Command ".to_string()
