@@ -4,7 +4,7 @@ use color_eyre::{Report, Result};
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 pub async fn update(app: &mut App, key_event: KeyEvent) -> Result<(), Report> {
-    // 1. Handle keystrokes for the text box if the popup is open
+    // Handle keystrokes for the text box if the popup is open
     if app.popup.is_editing() {
         match key_event.code {
             KeyCode::Enter => {
@@ -94,6 +94,7 @@ pub async fn update(app: &mut App, key_event: KeyEvent) -> Result<(), Report> {
         KeyCode::Char(c @ ('s' | 'a' | 'r' | 'k' | 'e')) => app.footer_action(c).await,
 
         KeyCode::Tab => {
+            app.load_selected_details().await;
             app.ui.toggle_focus();
         }
         _ => {}
