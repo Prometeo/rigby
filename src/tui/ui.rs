@@ -41,6 +41,7 @@ pub fn render(app: &mut App, frame: &mut Frame) {
             .focused(list_focused)
             .footer(get_list_footer('c'))
             .render(frame, items_area, &mut app.resources.containers.state);
+            app.ui.container_tab = ContainerTab::Logs;
         }
         Some(MenuItem::Images) => {
             CustomList::new(&app.resources.images.items, "Images")
