@@ -5,7 +5,7 @@ pub mod statefull_list;
 pub mod ui_state;
 
 pub use logs::LogViewer;
-pub use popup::CommandPopup;
+pub use popup::{CommandPopup, ConfirmAction, ConfirmButton};
 pub use resources::DockerResources;
 pub use statefull_list::StatefullList;
 pub use ui_state::{ContainerTab, Details, Focus, MenuItem, UiState};

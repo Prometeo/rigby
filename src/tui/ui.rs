@@ -1,13 +1,12 @@
+use crate::tui::components::{ContainerTab, Focus, MenuItem, popup::ConfirmButton};
 use crate::{container::models::DockerContainer, tui::app::App};
-
-use crate::tui::components::{ContainerTab, Focus, MenuItem};
 use ratatui::{
     Frame,
-    layout::{Constraint, Direction, Layout, Rect},
+    layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style, Stylize},
     text::{Line, Span, Text},
     widgets::{
-        Block, BorderType, Clear, List, ListItem, ListState, Paragraph, Scrollbar,
+        Block, BorderType, Borders, Clear, List, ListItem, ListState, Paragraph, Scrollbar,
         ScrollbarOrientation, ScrollbarState, Tabs,
     },
 };
@@ -70,16 +69,19 @@ pub fn render(app: &mut App, frame: &mut Frame) {
     // ----------------- Right Details Pane -----------------
     render_content(app, panels[1], frame, app.ui.focus == Focus::Content);
 
-    // ----------------- Popup -----------------
-    render_popup(app, frame);
+    // ----------------- Command Popup -----------------
+    render_popup(app, frame, 30, 3);
+
+    // ----------------- Confirm Popup -----------------
+    render_confirm_popup(app, frame);
 }
 
-fn render_popup(app: &App, frame: &mut Frame) {
-    if !app.popup.is_editing() {
+fn render_popup(app: &App, frame: &mut Frame, x: u16, y: u16) {
+    if !app.command_popup.is_editing() {
         return;
     }
 
-    let area = centered_rect(30, 3, frame.area());
+    let area = centered_rect(x, y, frame.area());
     frame.render_widget(Clear, area);
 
     let title = if let Some(container) = app.resources.containers.selected() {
@@ -93,11 +95,11 @@ fn render_popup(app: &App, frame: &mut Frame) {
         .border_type(BorderType::Thick)
         .border_style(Style::default().fg(Color::Yellow));
 
-    let paragraph = Paragraph::new(app.popup.text.as_str()).block(block);
+    let paragraph = Paragraph::new(app.command_popup.text.as_str()).block(block);
     frame.render_widget(paragraph, area);
 
     frame.set_cursor_position(ratatui::layout::Position {
-        x: area.x + app.popup.text.chars().count() as u16 + 1,
+        x: area.x + app.command_popup.text.chars().count() as u16 + 1,
         y: area.y + 1,
     });
 }
@@ -418,4 +420,66 @@ fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
             Constraint::Percentage((100 - percent_x) / 2),
         ])
         .split(popup_layout[1])[1]
+}
+
+pub fn render_confirm_popup(app: &App, frame: &mut Frame) {
+    if !app.confirm_popup.is_open {
+        return;
+    }
+
+    let area = centered_rect(20, 5, frame.area());
+
+    frame.render_widget(Clear, area);
+
+    // outer boundary
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .title(format!(" {} ", app.confirm_popup.title))
+        .style(Style::default().bg(Color::Reset));
+
+    let inner_area = block.inner(area);
+    frame.render_widget(block, area);
+
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Min(1), Constraint::Length(3)])
+        .split(inner_area);
+
+    let message = Paragraph::new(app.confirm_popup.message.clone()).alignment(Alignment::Center);
+    frame.render_widget(message, chunks[0]);
+
+    let button_chunks = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
+        .split(chunks[1]);
+
+    let (accept_style, cancel_style) = match app.confirm_popup.selected_button {
+        ConfirmButton::Accept => (
+            Style::default()
+                .fg(Color::Black)
+                .bg(Color::Green)
+                .add_modifier(Modifier::BOLD),
+            Style::default().fg(Color::White),
+        ),
+        ConfirmButton::Cancel => (
+            Style::default().fg(Color::White),
+            Style::default()
+                .fg(Color::Black)
+                .bg(Color::Red)
+                .add_modifier(Modifier::BOLD),
+        ),
+    };
+
+    // Accept button
+    let accept_btn = Paragraph::new(" Accept ")
+        .alignment(Alignment::Center)
+        .block(Block::default().borders(Borders::ALL).style(accept_style));
+
+    //  Cancel button
+    let cancel_btn = Paragraph::new(" Cancel ")
+        .alignment(Alignment::Center)
+        .block(Block::default().borders(Borders::ALL).style(cancel_style));
+
+    frame.render_widget(accept_btn, button_chunks[0]);
+    frame.render_widget(cancel_btn, button_chunks[1]);
 }

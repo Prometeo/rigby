@@ -1,3 +1,4 @@
+use crate::tui::components::popup::ConfirmPopup;
 use crate::utils::driver_connector;
 use crate::volume::{models::DockerVolume, service::list_volumes};
 use crate::{
@@ -31,7 +32,8 @@ use futures_util::StreamExt;
 use tokio::sync::mpsc::{UnboundedReceiver, unbounded_channel};
 
 use crate::tui::components::{
-    CommandPopup, ContainerTab, Details, DockerResources, Focus, LogViewer, MenuItem, UiState,
+    CommandPopup, ConfirmAction, ContainerTab, Details, DockerResources, Focus, LogViewer,
+    MenuItem, UiState,
 };
 
 pub enum DockerEventUpdate {
@@ -45,7 +47,8 @@ pub struct App {
     pub quit: bool,
     pub client: Docker,
     pub ui: UiState,
-    pub popup: CommandPopup,
+    pub command_popup: CommandPopup,
+    pub confirm_popup: ConfirmPopup,
     pub resources: DockerResources,
     pub logs: LogViewer,
     pub event_rx: Option<UnboundedReceiver<DockerEventUpdate>>,
@@ -134,15 +137,61 @@ impl App {
         if let Some(MenuItem::Containers) = self.ui.menu.selected()
             && let Some(container) = self.resources.containers.selected()
         {
+            let id = container.id.clone();
             match action {
-                's' => stop_container(&self.client, &container.id).await,
-                'a' => start_container(&self.client, &container.id).await,
-                'r' => restart_container(&self.client, &container.id).await,
-                'k' => remove_container(&self.client, &container.id).await,
-                'e' => self.popup.open(),
+                's' => self.confirm_popup.open(
+                    "Stop",
+                    "Stop this container?",
+                    ConfirmAction::StopContainer(id),
+                ),
+                'a' => {
+                    let client = self.client.clone();
+                    tokio::spawn(async move {
+                        let _ = start_container(&client, &id).await;
+                    });
+                }
+                'r' => self.confirm_popup.open(
+                    "Restart",
+                    "Restart this container?",
+                    ConfirmAction::RestartContainer(id),
+                ),
+                'k' => self.confirm_popup.open(
+                    "Delete",
+                    "Delete this container?",
+                    ConfirmAction::RemoveContainer(id),
+                ),
+                'e' => self.command_popup.open(),
                 _ => {}
             }
         }
+    }
+
+    pub async fn execute_container_pending_action(&mut self) {
+        let client = self.client.clone();
+
+        match &self.confirm_popup.pending_action {
+            ConfirmAction::StopContainer(id) => {
+                let id = id.clone();
+                tokio::spawn(async move {
+                    let _ = stop_container(&client, &id).await;
+                });
+            }
+            ConfirmAction::RestartContainer(id) => {
+                let id = id.clone();
+                tokio::spawn(async move {
+                    let _ = restart_container(&client, &id).await;
+                });
+            }
+            ConfirmAction::RemoveContainer(id) => {
+                let id = id.clone();
+                tokio::spawn(async move {
+                    let _ = remove_container(&client, &id).await;
+                });
+            }
+            ConfirmAction::None => {}
+        }
+
+        self.confirm_popup.close_and_clear();
     }
 
     pub async fn move_items_list_up(&mut self) {
@@ -354,8 +403,8 @@ impl App {
     }
 
     pub async fn execute_container_command(&mut self) {
-        if self.popup.text.is_empty() {
-            self.popup.close_and_clear();
+        if self.command_popup.text.is_empty() {
+            self.command_popup.close_and_clear();
             return;
         }
 
@@ -363,12 +412,12 @@ impl App {
             && let Some(container) = self.resources.containers.selected()
         {
             let cmd: Vec<String> = self
-                .popup
+                .command_popup
                 .text
                 .split_whitespace()
                 .map(|s| s.to_string())
                 .collect();
-            let command_string = self.popup.text.clone();
+            let command_string = self.command_popup.text.clone();
 
             let exec_options = CreateExecOptions {
                 cmd: Some(cmd),
@@ -397,7 +446,7 @@ impl App {
                 }
             });
         }
-        self.popup.close_and_clear();
+        self.command_popup.close_and_clear();
     }
 }
 
@@ -411,7 +460,8 @@ impl Default for App {
             client,
             event_rx,
             ui: UiState::new(),
-            popup: CommandPopup::new(),
+            command_popup: CommandPopup::new(),
+            confirm_popup: ConfirmPopup::new(),
             resources: DockerResources::new(),
             logs: LogViewer::new(),
         }
